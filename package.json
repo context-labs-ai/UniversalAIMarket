@@ -1,0 +1,72 @@
+{
+  "name": "universal-ai-market",
+  "version": "0.1.0",
+  "description": "Cross-chain AI Agent E-commerce powered by ZetaChain × Alibaba Qwen",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "clean": "hardhat clean",
+    "test": "hardhat test",
+    "test:coverage": "hardhat coverage",
+    
+    "localnet:start": "hardhat localnet",
+    "localnet:stop": "hardhat localnet-stop",
+    "localnet:check": "hardhat localnet-check",
+    
+    "deploy:local": "hardhat run scripts/deploy/deploy_local.ts --network localhost",
+
+    "deploy:polygon:testnet": "hardhat run scripts/deploy/deploy_polygon.ts --network polygonAmoy",
+    "deploy:zetachain:testnet": "hardhat run scripts/deploy/deploy_zetachain.ts --network zetaAthens",
+    "deploy:all:testnet": "pnpm deploy:polygon:testnet && pnpm deploy:zetachain:testnet",
+
+    "fund:market": "hardhat run scripts/utils/fund_market.ts --network localhost",
+
+    "demo:phase1": "hardhat run scripts/demo/phase1_demo.ts --network localhost",
+    "demo:phase1:testnet": "hardhat run scripts/demo/phase1_demo.ts --network baseSepolia",
+    
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write ."
+  },
+  "keywords": [
+    "zetachain",
+    "cross-chain",
+    "ai-agent",
+    "qwen",
+    "ecommerce",
+    "nft",
+    "hackathon"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
+    "@nomicfoundation/hardhat-ethers": "^3.0.0",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.0",
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.0",
+    "@typechain/ethers-v6": "^0.5.0",
+    "@typechain/hardhat": "^9.0.0",
+    "@types/chai": "^4.2.0",
+    "@types/mocha": ">=9.1.0",
+    "@types/node": ">=16.0.0",
+    "chai": "^4.2.0",
+    "eslint": "^8.0.0",
+    "hardhat": "^2.19.0",
+    "hardhat-gas-reporter": "^1.0.8",
+    "prettier": "^3.0.0",
+    "solidity-coverage": "^0.8.0",
+    "ts-node": ">=8.0.0",
+    "typechain": "^8.3.0",
+    "typescript": ">=4.5.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0",
+    "@zetachain/localnet": "^4.0.0",
+    "@zetachain/protocol-contracts": "^14.1.0",
+    "dotenv": "^16.0.0",
+    "ethers": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
