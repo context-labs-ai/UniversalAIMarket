@@ -133,6 +133,11 @@ The UI can proxy an external local Agent via SSE, while keeping the same judge-f
 - Proxy mode: `GET /api/agent/stream?engine=proxy&upstream=http://localhost:8080/api/agent/stream`
 - Tools for your Agent to call: `POST /api/agent/tool`
 
+There is a starter LangChain agent service under `apps/agent`:
+
+- Install: `pnpm -C apps/agent install`
+- Run: `pnpm agent:dev`
+
 ### Expected Output
 
 ```

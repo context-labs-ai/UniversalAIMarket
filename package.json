@@ -27,6 +27,10 @@
     "web:dev": "pnpm -C apps/web dev",
     "web:build": "pnpm -C apps/web build",
     "web:lint": "pnpm -C apps/web lint",
+
+    "agent:dev": "pnpm -C apps/agent dev",
+    "agent:build": "pnpm -C apps/agent build",
+    "agent:start": "pnpm -C apps/agent start",
     
     "lint": "eslint . --ext .ts",
     "format": "prettier --write ."

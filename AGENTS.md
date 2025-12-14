@@ -42,6 +42,14 @@ The hackathon UI is designed to be "agent-adapted": the frontend consumes a sing
 - Action endpoint (confirm flow): `apps/web/src/app/api/agent/action/route.ts`
   - `POST /api/agent/action` with `{ sessionId, action: "confirm_settlement" }`
 
+## External LangChain Agent (apps/agent)
+
+There is also an optional standalone agent service (for running a LangChain agent on your machine) under `apps/agent`.
+
+- SSE entry: `apps/agent/src/index.ts` (`GET /api/agent/stream`)
+- Confirm action: `apps/agent/src/index.ts` (`POST /api/agent/action`)
+- It calls the web tool bridge at `apps/web/src/app/api/agent/tool/route.ts`
+
 ### Event protocol stability
 
 Keep these SSE event names stable so the UI and external agents stay compatible:

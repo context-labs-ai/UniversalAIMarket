@@ -20,6 +20,8 @@ import {
   Sparkles,
   Store as StoreIcon,
   X,
+  Zap as ZapIcon,
+  RotateCcw,
 } from "lucide-react";
 import Button from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -405,6 +407,9 @@ export default function DemoApp() {
   const [checkoutMode, setCheckoutMode] = React.useState<CheckoutMode>("confirm");
   const [agentEngine, setAgentEngine] = React.useState<AgentEngine>("builtin");
   const [agentUpstream, setAgentUpstream] = React.useState("http://localhost:8080/api/agent/stream");
+  const [agentHealth, setAgentHealth] = React.useState<
+    { status: "idle" | "checking" | "ok" | "error"; message?: string }
+  >({ status: "idle" });
   const [agentSessionId, setAgentSessionId] = React.useState<string | null>(null);
   const [awaitingConfirm, setAwaitingConfirm] = React.useState(false);
   const agentSourceRef = React.useRef<EventSource | null>(null);
@@ -593,10 +598,10 @@ export default function DemoApp() {
       prev.map((t) =>
         t.id === id
           ? {
-              ...t,
-              ...patch,
-              ts: now(),
-            }
+            ...t,
+            ...patch,
+            ts: now(),
+          }
           : t
       )
     );
@@ -616,6 +621,35 @@ export default function DemoApp() {
     setToolModalMaximized(false);
     setChatModalOpen(false);
     setCopyStatus("idle");
+    setAgentHealth({ status: "idle" });
+  }
+
+  async function checkAgentHealth() {
+    if (agentEngine !== "proxy") return;
+    setAgentHealth({ status: "checking" });
+    try {
+      let healthUrl: string;
+      try {
+        const url = new URL(agentUpstream);
+        url.search = "";
+        url.pathname = "/health";
+        healthUrl = url.toString();
+      } catch {
+        throw new Error("无效的 Agent API Endpoint。");
+      }
+
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 4500);
+      const res = await fetch(healthUrl, { signal: controller.signal });
+      window.clearTimeout(timeout);
+
+      const json = (await res.json().catch(() => null)) as { ok?: boolean } | null;
+      if (!res.ok || !json?.ok) throw new Error(`Health check failed (HTTP ${res.status})`);
+      setAgentHealth({ status: "ok" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Health check failed";
+      setAgentHealth({ status: "error", message });
+    }
   }
 
   function buildTranscript(items: ChatMessage[]) {
@@ -856,30 +890,30 @@ export default function DemoApp() {
             <Input
               value={marketQuery}
               onChange={(e) => setMarketQuery(e.target.value)}
-            placeholder="搜索店铺 / 商品 / 标签..."
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant={marketKind === "all" ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => setMarketKind("all")}
-            >
-              全部
-            </Button>
-            <Button
-              variant={marketKind === "digital" ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => setMarketKind("digital")}
-            >
-              数字商品
-            </Button>
-            <Button
-              variant={marketKind === "physical" ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => setMarketKind("physical")}
-            >
-              实物
-            </Button>
+              placeholder="搜索店铺 / 商品 / 标签..."
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant={marketKind === "all" ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => setMarketKind("all")}
+              >
+                全部
+              </Button>
+              <Button
+                variant={marketKind === "digital" ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => setMarketKind("digital")}
+              >
+                数字商品
+              </Button>
+              <Button
+                variant={marketKind === "physical" ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => setMarketKind("physical")}
+              >
+                实物
+              </Button>
               <Badge className="bg-white/5 text-white/70">匹配店铺 {visibleStores.length}</Badge>
             </div>
           </div>
@@ -1069,18 +1103,41 @@ export default function DemoApp() {
   async function confirmSettlement() {
     if (!agentSessionId || !awaitingConfirm || settling || running) return;
     try {
-      const res = await fetch("/api/agent/action", {
+      const actionUrl =
+        agentEngine === "proxy"
+          ? (() => {
+            try {
+              const url = new URL(agentUpstream);
+              url.search = "";
+              url.pathname = "/api/agent/action";
+              return url.toString();
+            } catch {
+              return null;
+            }
+          })()
+          : "/api/agent/action";
+
+      if (!actionUrl) throw new Error("无效的 Agent API Endpoint，请检查控制台配置。");
+
+      const res = await fetch(actionUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: agentSessionId, action: "confirm_settlement" }),
       });
       const json = (await res.json().catch(() => null)) as { ok?: boolean } | null;
       if (!res.ok || !json?.ok) throw new Error("确认失败，请重试。");
+      setAwaitingConfirm(false);
+      setSettling(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "确认失败，请重试。";
       pushMessage({ role: "system", stage: "settle", speaker: "系统", content: message });
       setAwaitingConfirm(true);
     }
+  }
+
+  function confirmStart() {
+    setAwaitingConfirm(false);
+    runBuyerAgent();
   }
 
   const headerBadges = (
@@ -1098,582 +1155,525 @@ export default function DemoApp() {
   );
 
   return (
-    <div className="min-h-screen bg-hero text-white">
-      <div className="mx-auto max-w-[1440px] px-6 py-8">
-        <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 border border-white/10">
-              <Sparkles className="h-5 w-5 text-indigo-200" />
+    <div className="min-h-screen font-sans selection:bg-indigo-500/30 text-foreground pb-12">
+      <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-6">
+        <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 shadow-[0_0_20px_rgba(99,102,241,0.25)]">
+              <StoreIcon className="h-6 w-6 text-white" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-semibold tracking-tight">通用 AI 市场</h1>
-                <Badge
-                  className={cn(
-                    "border-white/10 bg-white/5 text-white/75",
-                    !configReady && "border-rose-400/20 bg-rose-500/10 text-rose-100"
-                  )}
-                >
-                  {mode === "testnet" ? "测试网" : "模拟"}
-                </Badge>
+              <h1 className="text-xl font-bold tracking-tight text-white/90">
+                Universal AI Market
+              </h1>
+              <div className="text-xs font-medium text-white/50">
+                Agent-to-Agent Commerce Protocol
               </div>
-              <p className="text-sm text-white/70">
-                买家 Agent 与卖家 Agent 协商后，由 ZetaChain 一次性完成跨链支付与交付。
-              </p>
-              <div className="mt-2">{headerBadges}</div>
             </div>
           </div>
-
-          <div className="flex flex-col gap-2 md:items-end">
-            <div className="flex items-center gap-2">
-              <Button
-                variant={mode === "testnet" ? "primary" : "secondary"}
-                size="sm"
-                onClick={() => setMode("testnet")}
-                disabled={!configReady}
-                title={!configReady ? `缺少环境变量：${config.missing.join(", ")}` : undefined}
-              >
-                <Coins className="h-4 w-4" />
-                测试网实盘
-              </Button>
-              <Button
-                variant={mode === "simulate" ? "primary" : "secondary"}
-                size="sm"
-                onClick={() => setMode("simulate")}
-              >
-                <Command className="h-4 w-4" />
-                模拟
-              </Button>
-              <Button variant="ghost" size="sm" onClick={resetDemo}>
-                重置
-              </Button>
-            </div>
-            <div className="text-xs text-white/60">
-              买家：<span className="font-mono">{formatAddress(config.accounts?.buyer)}</span> | 卖家：{" "}
-              <span className="font-mono">{formatAddress(config.accounts?.seller)}</span>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setMarketModalOpen(true)}
+              className="glass-panel hover:bg-white/10"
+            >
+              <StoreIcon className="mr-2 h-4 w-4" />
+              浏览市场
+            </Button>
+            <div className="h-4 w-[1px] bg-white/10" />
+            <div className="flex items-center gap-2 rounded-lg glass-panel px-3 py-1.5 text-xs text-white/60">
+              <div
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  liveOnchain ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-amber-400"
+                )}
+              />
+              {liveOnchain ? "Testnet Connected" : "Simulation Mode"}
             </div>
           </div>
         </header>
 
-        {!configReady && (
-          <div className="mt-4 rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4 text-sm text-rose-100">
-            <div className="font-medium">测试网配置未完成</div>
-            <div className="mt-1 text-rose-100/80">
-              缺少环境变量：<span className="font-mono">{config.missing.join(", ")}</span>。你仍可以使用{" "}
-              <span className="font-medium">模拟</span> 模式。
-            </div>
-          </div>
-        )}
-
-        <main className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr_420px]">
-          {renderMarketplacePanel("embedded")}
-
-          <div className={cn(chatModalOpen && "fixed inset-0 z-50 p-4")}>
-            <div className={cn(chatModalOpen && "mx-auto h-full max-w-6xl")}>
-              <Card className={cn("overflow-hidden", chatModalOpen && "flex h-full flex-col")}>
-            <CardHeader className="flex flex-row items-start justify-between gap-3">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquareText className="h-4 w-4 text-white/80" />
-                  Agent 对话（可观测）
+        <main className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
+          {/* LEFT COLUMN: Config & Control (3 cols) */}
+          <div className="space-y-6 lg:col-span-3">
+            <Card className="glass-panel border-white/5 overflow-hidden">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-medium text-indigo-100/90 flex items-center gap-2">
+                  <Command className="h-4 w-4" />
+                  控制台
                 </CardTitle>
-                <CardDescription>买家 Agent 先浏览商品，再与卖家 Agent 对话协商。</CardDescription>
-              </div>
-              {chatModalOpen ? (
-                <Button variant="secondary" size="sm" onClick={() => setChatModalOpen(false)}>
-                  <X className="h-4 w-4" />
-                  关闭
-                </Button>
-              ) : (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setChatModalOpen(true)}
-                  title="放大查看对话"
-                >
-                  <Maximize2 className="h-4 w-4" />
-                  放大
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent
-              className={cn(
-                chatModalOpen
-                  ? "grid flex-1 min-h-0 grid-cols-1 grid-rows-1 gap-4 lg:grid-cols-[360px_minmax(0,1fr)]"
-                  : "flex h-[640px] flex-col gap-3"
-              )}
-            >
-              <div
-                className={cn(
-                  "grid gap-2",
-                  chatModalOpen && "min-h-0 overflow-auto rounded-2xl border border-white/10 bg-black/10 p-3"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-medium text-white/70">买家 Agent 需求</div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="secondary" size="sm" onClick={runBuyerAgent} disabled={running || settling}>
-                      <Search className="h-4 w-4" />
-                      开始逛
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={confirmSettlement}
-                      disabled={
-                        !deal ||
-                        settling ||
-                        running ||
-                        !awaitingConfirm ||
-                        (mode === "testnet" && (!configReady || !selectedProduct.demoReady))
-                      }
-                      title={
-                        mode === "testnet" && deal && !selectedProduct.demoReady
-                          ? "该商品仅支持模拟模式"
-                          : !awaitingConfirm
-                            ? checkoutMode === "auto"
-                              ? "全自动模式下会自动结算"
-                              : "等待 Agent 生成订单并进入确认阶段"
-                            : undefined
-                      }
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-white/50 uppercase tracking-wider">
+                    演示模式
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setMode("testnet")}
+                      disabled={!configReady}
+                      className={cn(
+                        "flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all",
+                        mode === "testnet"
+                          ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+                          : "border-white/5 bg-white/5 text-white/50 hover:bg-white/10",
+                        !configReady && "opacity-50 cursor-not-allowed"
+                      )}
                     >
-                      <Send className="h-4 w-4" />
-                      {awaitingConfirm ? "确认结算" : "发起结算"}
-                    </Button>
+                      <ZapIcon className="h-3.5 w-3.5" />
+                      测试网
+                    </button>
+                    <button
+                      onClick={() => setMode("simulate")}
+                      className={cn(
+                        "flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all",
+                        mode === "simulate"
+                          ? "border-indigo-500/50 bg-indigo-500/10 text-indigo-100 shadow-[0_0_15px_rgba(99,102,241,0.15)]"
+                          : "border-white/5 bg-white/5 text-white/50 hover:bg-white/10"
+                      )}
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      模拟
+                    </button>
                   </div>
-                </div>
-                <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-xs text-white/70">
-                      结算模式：
-                      <span className="ml-1 font-medium text-white">
-                        {checkoutMode === "auto" ? "全自动（Agent 发起）" : "需确认（你点结算）"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-black/20 p-1">
-                      <Button
-                        variant={checkoutMode === "auto" ? "primary" : "secondary"}
-                        size="sm"
-                        onClick={() => setCheckoutMode("auto")}
-                      >
-                        全自动
-                      </Button>
-                      <Button
-                        variant={checkoutMode === "confirm" ? "primary" : "secondary"}
-                        size="sm"
-                        onClick={() => setCheckoutMode("confirm")}
-                      >
-                        需确认
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="text-[11px] text-white/60">
-                    {checkoutMode === "auto"
-                      ? "订单生成后自动调用结算工具（演示更丝滑）。"
-                      : "订单生成后等待你点击「发起结算」再继续。"}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-xs text-white/70">
-                      Agent 引擎：
-                      <span className="ml-1 font-medium text-white">
-                        {agentEngine === "builtin" ? "内置 Demo（本项目）" : "外部 LangChain（本机）"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-black/20 p-1">
-                      <Button
-                        variant={agentEngine === "builtin" ? "primary" : "secondary"}
-                        size="sm"
-                        onClick={() => setAgentEngine("builtin")}
-                        disabled={running || settling}
-                      >
-                        内置
-                      </Button>
-                      <Button
-                        variant={agentEngine === "proxy" ? "primary" : "secondary"}
-                        size="sm"
-                        onClick={() => setAgentEngine("proxy")}
-                        disabled={running || settling}
-                      >
-                        外部
-                      </Button>
-                    </div>
-                  </div>
-                  {agentEngine === "proxy" ? (
-                    <Input
-                      value={agentUpstream}
-                      onChange={(e) => setAgentUpstream(e.target.value)}
-                      placeholder="http://localhost:8080/api/agent/stream"
-                      disabled={running || settling}
-                    />
-                  ) : (
-                    <div className="text-[11px] text-white/60">
-                      外部 Agent 只需输出同样的 SSE 事件协议，并可调用 `/api/agent/tool` 执行工具。
+                  {!configReady && (
+                    <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-[10px] text-amber-200/80 border border-amber-500/20">
+                      缺少环境变量配置，仅支持模拟模式。
                     </div>
                   )}
                 </div>
-                <Textarea value={goal} onChange={(e) => setGoal(e.target.value)} />
-                <Input
-                  value={buyerNote}
-                  onChange={(e) => setBuyerNote(e.target.value)}
-                  placeholder="可选：补充备注（收货偏好/预算等）"
-                />
-              </div>
 
-              <div
-                className={cn(
-                  "min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-black/15",
-                  chatModalOpen ? "h-full" : "flex-1"
-                )}
-              >
-                <div className="flex h-full flex-col">
-                  <div className="flex flex-col gap-2 border-b border-white/10 px-4 py-3 text-xs text-white/70 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-2">
-                      <Bot className="h-4 w-4 text-indigo-200" />
-                      买家 Agent
-                      <span className="text-white/30">|</span>
-                      <Bot className="h-4 w-4 text-emerald-200" />
-                      {selectedStore.sellerAgentName}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-white/5 p-1">
-                        <Button
-                          variant={chatView === "dialogue" ? "primary" : "secondary"}
-                          size="sm"
-                          onClick={() => setChatView("dialogue")}
-                        >
-                          对话
-                        </Button>
-                        <Button
-                          variant={chatView === "process" ? "primary" : "secondary"}
-                          size="sm"
-                          onClick={() => setChatView("process")}
-                        >
-                          流程
-                        </Button>
-                      </div>
-                      <Button
-                        variant={autoScroll ? "primary" : "secondary"}
-                        size="sm"
-                        onClick={() => setAutoScroll((v) => !v)}
-                        title={autoScroll ? "自动跟随最新消息" : "已暂停自动滚动"}
-                      >
-                        {autoScroll ? (
-                          <CircleCheck className="h-4 w-4" />
-                        ) : (
-                          <CircleDashed className="h-4 w-4" />
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-white/50 uppercase tracking-wider">
+                    Agent 引擎
+                  </label>
+                  <div className="flex rounded-lg bg-black/20 p-1">
+                    {(["builtin", "proxy"] as const).map((e) => (
+                      <button
+                        key={e}
+                        onClick={() => setAgentEngine(e)}
+                        className={cn(
+                          "flex-1 rounded-md py-1.5 text-xs font-medium transition-all",
+                          agentEngine === e
+                            ? "bg-white/10 text-white shadow-sm"
+                            : "text-white/40 hover:text-white/60"
                         )}
-                        {autoScroll ? "跟随" : "暂停"}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={copyTranscript}
-                        disabled={visibleChatMessages.length === 0}
                       >
-                        <Copy className="h-4 w-4" />
-                        复制
-                      </Button>
-                      {copyStatus === "ok" ? (
-                        <Badge className="border-emerald-300/20 bg-emerald-500/15 text-emerald-100">
-                          已复制
-                        </Badge>
-                      ) : copyStatus === "err" ? (
-                        <Badge className="border-rose-400/20 bg-rose-500/10 text-rose-100">
-                          复制失败
-                        </Badge>
-                      ) : null}
-                      <Badge className="bg-white/5 text-white/70">
-                        订单：{" "}
-                        <span className="font-mono">
-                          {deal ? `${deal.dealId.slice(0, 6)}...${deal.dealId.slice(-4)}` : "-"}
-                        </span>
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div ref={chatScrollEmbeddedRef} className="flex-1 min-h-0 overflow-auto p-4">
-                    <AnimatePresence initial={false}>
-                      {visibleChatMessages.length === 0 ? (
-                        <motion.div
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="grid place-items-center py-16 text-center text-sm text-white/60"
-                        >
-                          <div className="max-w-md">
-                            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/5 border border-white/10">
-                              <Sparkles className="h-5 w-5 text-indigo-200" />
-                            </div>
-                            <div className="mt-4 font-medium text-white">
-                              {messages.length === 0
-                                ? "点击「开始逛」启动买家 Agent"
-                                : "当前视图没有可显示的对话消息"}
-                            </div>
-                            <div className="mt-2">
-                              {messages.length === 0
-                                ? "评委将看到：意图 -> 工具调用 -> 跨链结算时间线（Base -> ZetaChain -> Polygon）。"
-                                : "切换到「流程」可查看工具/系统消息，或继续推进对话。"}
-                            </div>
-                          </div>
-                        </motion.div>
-                      ) : (
-                        <div className="space-y-3">
-                          {chatView === "process" ? (
-                            <div className="sticky top-0 z-10 hidden md:grid md:grid-cols-[minmax(0,1fr)_320px_minmax(0,1fr)] md:gap-4 rounded-2xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white/70 backdrop-blur">
-                              <div className="flex min-w-0 items-center gap-2 text-emerald-100/80">
-                                <Bot className="h-4 w-4 text-emerald-200" />
-                                <span className="truncate">{selectedStore.sellerAgentName}</span>
-                              </div>
-                              <div className="flex items-center justify-center gap-2 text-white/60">
-                                <Command className="h-4 w-4" />
-                                工具/系统
-                              </div>
-                              <div className="flex min-w-0 items-center justify-end gap-2 text-indigo-100/80">
-                                买家 Agent
-                                <Bot className="h-4 w-4 text-indigo-200" />
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="sticky top-0 z-10 hidden md:grid md:grid-cols-2 md:gap-4 rounded-2xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white/70 backdrop-blur">
-                              <div className="flex items-center gap-2 text-emerald-100/80">
-                                <Bot className="h-4 w-4 text-emerald-200" />
-                                <span className="truncate">{selectedStore.sellerAgentName}</span>
-                              </div>
-                              <div className="flex items-center justify-end gap-2 text-indigo-100/80">
-                                买家 Agent
-                                <Bot className="h-4 w-4 text-indigo-200" />
-                              </div>
-                            </div>
-                          )}
-
-                          <div
-                            className={cn(
-                              "grid gap-3 md:gap-x-4",
-                              chatView === "process"
-                                ? "md:grid-cols-[minmax(0,1fr)_320px_minmax(0,1fr)]"
-                                : "md:grid-cols-2"
-                            )}
-                          >
-                            {chatRows.map((row) =>
-                              row.kind === "stage" ? (
-                                <motion.div
-                                  key={row.id}
-                                  initial={{ opacity: 0, y: 4 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, y: 4 }}
-                                  className={cn(
-                                    "flex items-center justify-center",
-                                    chatView === "process" ? "md:col-span-3" : "md:col-span-2"
-                                  )}
-                                >
-                                  <div
-                                    className={cn(
-                                      "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs",
-                                      chatStageBadgeClass(row.stage)
-                                    )}
-                                  >
-                                    {chatStageIcon(row.stage)}
-                                    <span className="font-medium">{chatStageLabel(row.stage)}</span>
-                                  </div>
-                                </motion.div>
-                              ) : (
-                                <motion.div
-                                  key={row.id}
-                                  initial={{ opacity: 0, y: 8 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, y: 8 }}
-                                  className={cn(
-                                    "flex min-w-0",
-                                    row.message.role === "seller" && "md:col-start-1 justify-start",
-                                    row.message.role === "buyer" &&
-                                      (chatView === "process"
-                                        ? "md:col-start-3 justify-end"
-                                        : "md:col-start-2 justify-end"),
-                                    (row.message.role === "tool" || row.message.role === "system") &&
-                                      (chatView === "process"
-                                        ? "md:col-start-2 justify-center"
-                                        : "md:col-span-2 justify-center"),
-                                    !["buyer", "seller", "tool", "system"].includes(row.message.role) &&
-                                      (chatView === "process"
-                                        ? "md:col-start-2 justify-center"
-                                        : "md:col-span-2 justify-center")
-                                  )}
-                                >
-                                  <div
-                                    className={cn(
-                                      "w-full max-w-[96%] rounded-2xl border px-3 py-2 text-sm",
-                                      row.message.role === "buyer" &&
-                                        "border-indigo-300/20 bg-indigo-500/15 text-indigo-50",
-                                      row.message.role === "seller" &&
-                                        "border-emerald-300/20 bg-emerald-500/10 text-emerald-50",
-                                      row.message.role === "system" && "border-white/10 bg-white/5 text-white/80",
-                                      row.message.role === "tool" &&
-                                        "border-white/10 bg-black/20 text-white/80 cursor-pointer hover:bg-black/25"
-                                    )}
-                                    onClick={() => {
-                                      if (row.message.role !== "tool" || !row.message.tool) return;
-                                      setToolModalMaximized(false);
-                                      setToolModal({
-                                        name: row.message.tool.name,
-                                        ts: row.message.ts,
-                                        stage: row.message.stage,
-                                        args: row.message.tool.args,
-                                        result: row.message.tool.result,
-                                      });
-                                    }}
-                                  >
-                                    {row.message.role === "tool" && row.message.tool ? (
-                                      <div className="space-y-2">
-                                        <div className="flex items-center gap-2 text-xs text-white/70">
-                                          <Command className="h-3.5 w-3.5" />
-                                          <span className="font-mono">{row.message.tool.name}</span>
-                                          <span className="ml-auto font-mono text-white/45">
-                                            {formatTime(row.message.ts)}
-                                          </span>
-                                        </div>
-                                        <div className="grid gap-2 rounded-xl bg-black/20 p-3 text-xs text-white/75">
-                                          <div className="space-y-1">
-                                            <div className="text-white/55">输入</div>
-                                          <div className="font-mono text-white/75 break-all whitespace-pre-wrap">
-                                            {truncateText(
-                                              stringifyForDisplay(row.message.tool.args, false),
-                                              220
-                                            )}
-                                          </div>
-                                          </div>
-                                          <div className="space-y-1">
-                                            <div className="text-white/55">输出</div>
-                                            <div className="font-mono text-white/75 break-all whitespace-pre-wrap">
-                                              {row.message.tool.result == null
-                                                ? "（等待返回）"
-                                                : truncateText(
-                                                    stringifyForDisplay(row.message.tool.result, false),
-                                                    220
-                                                  )}
-                                            </div>
-                                          </div>
-                                          <div className="flex items-center justify-between pt-1 text-[11px] text-white/55">
-                                            <span>点击卡片查看完整 JSON</span>
-                                            <span className="inline-flex items-center gap-1">
-                                              <Maximize2 className="h-3 w-3" />
-                                              详情
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <div>
-                                        <div className="flex items-center gap-2 text-xs text-white/60">
-                                          {row.message.role === "buyer" ? (
-                                            <Bot className="h-3.5 w-3.5 text-indigo-200" />
-                                          ) : row.message.role === "seller" ? (
-                                            <Bot className="h-3.5 w-3.5 text-emerald-200" />
-                                          ) : (
-                                            <Sparkles className="h-3.5 w-3.5 text-white/70" />
-                                          )}
-                                          <span className="font-medium">{row.message.speaker}</span>
-                                          <span className="ml-auto font-mono text-white/45">
-                                            {formatTime(row.message.ts)}
-                                          </span>
-                                        </div>
-                                        <div className="mt-1 whitespace-pre-wrap leading-relaxed">
-                                          {row.message.content}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                </motion.div>
-                              )
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </AnimatePresence>
+                        {e === "builtin" ? "内置逻辑" : "API 代理"}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </div>
-            </CardContent>
-              </Card>
-            </div>
-          </div>
 
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Cable className="h-4 w-4 text-white/80" />
-                全流程时间线
-              </CardTitle>
-              <CardDescription>每一步都可见，适合评委快速理解。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2">
-                {timeline.map((t) => (
-                  <div
-                    key={t.id}
-                    className={cn(
-                      "rounded-2xl border p-3",
-                      t.status === "done" && "border-emerald-400/15 bg-emerald-500/10",
-                      t.status === "running" && "border-indigo-400/20 bg-indigo-500/10",
-                      t.status === "error" && "border-rose-400/20 bg-rose-500/10",
-                      t.status === "idle" && "border-white/10 bg-white/5"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          {statusIcon(t.status)}
-                          <div className="truncate text-sm font-semibold">{t.title}</div>
-                        </div>
-                        <div className="mt-1 flex items-center gap-2 text-xs text-white/65">
-                          <span className="inline-flex items-center gap-1">
-                            {chainIcon(t.chain)}
-                            {chainLabel(t.chain)}
-                          </span>
-                          {t.detail ? (
-                            <>
-                              <span className="text-white/25">|</span>
-                              <span className="truncate">{t.detail}</span>
-                            </>
-                          ) : null}
-                        </div>
-                      </div>
-                      <Badge className="bg-white/5 text-white/60 font-mono">
-                        {t.txHash ? `${t.txHash.slice(0, 10)}...` : "-"}
-                      </Badge>
+                {agentEngine === "proxy" && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-white/50">API Endpoint</label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={agentUpstream}
+                        onChange={(e) => setAgentUpstream(e.target.value)}
+                        className="h-8 text-xs font-mono bg-black/20 border-white/5"
+                      />
+                      <Button
+                        variant="secondary"
+                        className="h-8 px-3 glass-panel text-white/70 shrink-0 whitespace-nowrap min-w-14"
+                        onClick={checkAgentHealth}
+                        disabled={agentHealth.status === "checking"}
+                        title="请求 Agent 服务的 /health"
+                      >
+                        {agentHealth.status === "checking" ? "检测中" : "检测"}
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-white/45">
+                      <div
+                        className={cn(
+                          "h-1.5 w-1.5 rounded-full",
+                          agentHealth.status === "ok"
+                            ? "bg-emerald-400"
+                            : agentHealth.status === "error"
+                              ? "bg-rose-400"
+                              : agentHealth.status === "checking"
+                                ? "bg-amber-400 animate-pulse"
+                                : "bg-white/20"
+                        )}
+                      />
+                      {agentHealth.status === "ok"
+                        ? "Agent 服务可用"
+                        : agentHealth.status === "error"
+                          ? `不可用：${agentHealth.message ?? "未知错误"}`
+                          : agentHealth.status === "checking"
+                            ? "正在检查..."
+                            : "未检查"}
                     </div>
                   </div>
-                ))}
-              </div>
+                )}
 
-              <Card className="border-white/10 bg-black/10">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-indigo-200" />
-                    演示提示
-                  </CardTitle>
-                  <CardDescription>
-                    让评委一眼看懂：意图 -&gt; 工具调用 -&gt; 跨链结算。
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm text-white/75">
-                  <div className="flex items-center gap-2">
-                    <Badge className="bg-white/5 text-white/70">提示</Badge>
-                    <span>
-                      如果测试网缺少 USDC / Gas / 地址配置，切换到 <span className="font-medium">模拟</span> 模式即可。
-                    </span>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-white/50 uppercase tracking-wider">
+                    结算模式
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setCheckoutMode("auto")}
+                      disabled={running || settling}
+                      className={cn(
+                        "flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all",
+                        checkoutMode === "auto"
+                          ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+                          : "border-white/5 bg-white/5 text-white/50 hover:bg-white/10",
+                        (running || settling) && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      <Coins className="h-3.5 w-3.5" />
+                      全自动
+                    </button>
+                    <button
+                      onClick={() => setCheckoutMode("confirm")}
+                      disabled={running || settling}
+                      className={cn(
+                        "flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all",
+                        checkoutMode === "confirm"
+                          ? "border-indigo-500/50 bg-indigo-500/10 text-indigo-100 shadow-[0_0_15px_rgba(99,102,241,0.15)]"
+                          : "border-white/5 bg-white/5 text-white/50 hover:bg-white/10",
+                        (running || settling) && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      <Bot className="h-3.5 w-3.5" />
+                      手动确认
+                    </button>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className="bg-white/5 text-white/70">一句话</Badge>
-                    <span>Base 付款 -&gt; ZetaChain 编排 -&gt; Polygon 交付，一次完成。</span>
+                  <div className="text-[10px] leading-relaxed text-white/45">
+                    全自动：Agent 自动发起跨链结算。手动确认：生成 Deal 后需要你点击“发起结算”继续。
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-white/5">
+                  <Button
+                    variant="danger"
+                    className="w-full h-8 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-200 border border-red-500/20"
+                    onClick={resetDemo}
+                  >
+                    <RotateCcw className="mr-2 h-3 w-3" />
+                    重置所有状态
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+              <Card className="glass-panel border-white/5">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-medium text-indigo-100/90 flex items-center gap-2">
+                    <ShoppingBag className="h-4 w-4" />
+                    当前目标
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <div className="mb-2 flex items-center gap-2 text-xs text-white/60">
+                      <Bot className="h-3.5 w-3.5 text-indigo-300" />
+                      买家 Agent 任务
+                    </div>
+                    <Textarea
+                      value={goal}
+                      onChange={(e) => setGoal(e.target.value)}
+                      className="min-h-[80px] border-0 bg-transparent p-0 text-sm leading-relaxed text-white/90 focus-visible:ring-0 resize-none"
+                    />
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <div className="mb-2 flex items-center gap-2 text-xs text-white/60">
+                      <MessageSquareText className="h-3.5 w-3.5 text-white/60" />
+                      补充说明（可选）
+                    </div>
+                    <Textarea
+                      value={buyerNote}
+                      onChange={(e) => setBuyerNote(e.target.value)}
+                      placeholder="例如：更偏好可立即交付/需要发票/希望卖家承诺 24h 内发货…"
+                      className="min-h-[64px] border-0 bg-transparent p-0 text-sm leading-relaxed text-white/80 placeholder:text-white/30 focus-visible:ring-0 resize-none"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-white/50">
+                    <div className={cn("h-1.5 w-1.5 rounded-full", running ? "bg-emerald-400 animate-pulse" : "bg-white/20")} />
+                    Status: {running ? "Running" : "Idle"}
                   </div>
                 </CardContent>
               </Card>
-            </CardContent>
-          </Card>
+          </div>
+
+          {/* MIDDLE COLUMN: Main Interaction (6 cols) */}
+          <div className="lg:col-span-6 flex flex-col gap-6 h-[calc(100vh-8rem)] min-h-[600px]">
+            <Card className="flex-1 flex flex-col glass-panel overflow-hidden border-indigo-500/10 shadow-[0_0_50px_-10px_rgba(99,102,241,0.05)]">
+              {/* Chat Header */}
+              <div className="flex items-center justify-between border-b border-white/5 bg-white/[0.02] px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <Badge variant="outline" className="border-indigo-500/30 bg-indigo-500/10 text-indigo-200">
+                    {chatStageLabel(normalizeChatStage(messages[messages.length - 1]?.stage))}
+                  </Badge>
+                  <div className="text-sm text-white/60">
+                    {messages.length} 消息
+                  </div>
+                  <div className="hidden xl:flex items-center gap-2 text-[11px] text-white/55">
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-black/20 px-2 py-1 border border-white/5">
+                      <Bot className="h-3.5 w-3.5 text-indigo-200/80" />
+                      买家：
+                      {config.accounts?.buyer ? formatAddress(config.accounts.buyer) : "买家 Agent"}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-black/20 px-2 py-1 border border-white/5">
+                      <StoreIcon className="h-3.5 w-3.5 text-emerald-200/80" />
+                      卖家：{selectedStore.name}
+                      {config.accounts?.seller ? ` (${formatAddress(config.accounts.seller)})` : " 卖家 Agent"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 rounded-lg bg-black/20 p-0.5">
+                  <button
+                    onClick={() => setChatView("process")}
+                    className={cn(
+                      "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                      chatView === "process" ? "bg-white/10 text-white shadow-sm" : "text-white/40 hover:text-white/60"
+                    )}
+                  >
+                    过程
+                  </button>
+                  <button
+                    onClick={() => setChatView("dialogue")}
+                    className={cn(
+                      "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                      chatView === "dialogue" ? "bg-white/10 text-white shadow-sm" : "text-white/40 hover:text-white/60"
+                    )}
+                  >
+                    对话
+                  </button>
+                </div>
+              </div>
+
+              {/* Chat Content */}
+              <div className="relative flex-1 overflow-hidden bg-black/10">
+                <div
+                  ref={chatScrollEmbeddedRef}
+                  className="absolute inset-0 overflow-y-auto p-4 space-y-6 scroll-smooth"
+                >
+                  <AnimatePresence initial={false} mode="popLayout">
+                    {visibleChatMessages.length === 0 ? (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="flex h-full flex-col items-center justify-center text-center p-8"
+                      >
+                        <div className="h-24 w-24 rounded-full bg-white/5 flex items-center justify-center ring-1 ring-white/10 mb-6">
+                          <Sparkles className="h-10 w-10 text-indigo-300/80" />
+                        </div>
+                        <h3 className="text-lg font-medium text-white/90">准备就绪</h3>
+                        <p className="mt-2 text-sm text-white/50 max-w-xs">
+                          点击下方按钮启动买家 Agent，它将自主浏览市场并完成交易。
+                        </p>
+                      </motion.div>
+                    ) : (
+                      <div className="space-y-4">
+                        {chatRows.map((row) => (
+                          row.kind === 'stage' ? (
+                            <div key={row.id} className="flex justify-center py-4">
+                              <span className={cn(
+                                "px-3 py-1 rounded-full text-xs font-medium border backdrop-blur-md flex items-center gap-1.5",
+                                chatStageBadgeClass(row.stage)
+                              )}>
+                                {chatStageIcon(row.stage)}
+                                {chatStageLabel(row.stage)}
+                              </span>
+                            </div>
+                          ) : (
+                            <motion.div
+                              key={row.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className={cn(
+                                "flex gap-3 max-w-[90%]",
+                                row.message.role === 'buyer' ? "ml-auto flex-row-reverse" : ""
+                              )}
+                            >
+                              <div className={cn(
+                                "h-8 w-8 rounded-full flex items-center justify-center shrink-0 border",
+                                row.message.role === 'buyer' ? "bg-indigo-500/20 border-indigo-500/30 text-indigo-200" :
+                                  row.message.role === 'seller' ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-200" :
+                                    "bg-white/5 border-white/10 text-white/50"
+                              )}>
+                                {row.message.role === 'buyer' ? <Bot className="h-4 w-4" /> :
+                                  row.message.role === 'seller' ? <StoreIcon className="h-4 w-4" /> :
+                                    <Command className="h-4 w-4" />}
+                              </div>
+                              <div className={cn(
+                                "rounded-2xl p-3 text-sm leading-relaxed border break-words",
+                                row.message.role === 'buyer' ? "bg-indigo-600/10 border-indigo-500/20 text-indigo-100 rounded-tr-sm" :
+                                  row.message.role === 'seller' ? "bg-emerald-600/10 border-emerald-500/20 text-emerald-100 rounded-tl-sm" :
+                                    "bg-white/5 border-white/10 text-white/70 font-mono text-xs w-full"
+                              )}>
+                                {row.message.role === 'tool' && row.message.tool ? (
+                                  <div
+                                    className="space-y-2 cursor-pointer group"
+                                    onClick={() => {
+                                      setToolModal({
+                                        name: row.message.tool!.name,
+                                        ts: row.message.ts,
+                                        stage: row.message.stage,
+                                        args: row.message.tool!.args,
+                                        result: row.message.tool!.result,
+                                      });
+                                    }}
+                                  >
+                                    <div className="flex items-center justify-between text-xs opacity-70 border-b border-white/5 pb-1 mb-1">
+                                      <span className="font-bold">{row.message.tool.name}</span>
+                                      <Maximize2 className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                    <div className="opacity-80 line-clamp-3">
+                                      Input: {stringifyForDisplay(row.message.tool.args, false)}
+                                    </div>
+                                    <div className="opacity-60 text-[10px] mt-1 text-emerald-300">
+                                      Result: {row.message.tool.result ? "Success" : "Pending..."}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between text-[10px] text-white/50">
+                                      <span className="font-semibold">{row.message.speaker}</span>
+                                      <span className="font-mono">{formatTime(row.message.ts)}</span>
+                                    </div>
+                                    <div>{row.message.content}</div>
+                                  </div>
+                                )}
+                              </div>
+                            </motion.div>
+                          )
+                        ))}
+                      </div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+
+              {/* Chat Footer */}
+              <div className="p-4 bg-white/[0.02] border-t border-white/5">
+                {running ? (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      className="flex-1 glass-panel text-white/70"
+                      onClick={resetDemo}
+                    >
+                      中止
+                    </Button>
+                    <div className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-200 text-sm font-medium animate-pulse">
+                      <CircleDashed className="h-4 w-4 animate-spin" />
+                      Running...
+                    </div>
+                  </div>
+                ) : settling ? (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      className="flex-1 glass-panel text-white/70"
+                      onClick={resetDemo}
+                    >
+                      中止
+                    </Button>
+                    <div className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-100 text-sm font-medium animate-pulse">
+                      <CircleDashed className="h-4 w-4 animate-spin" />
+                      结算中...
+                    </div>
+                  </div>
+                ) : awaitingConfirm ? (
+                  <div className="flex gap-2">
+                    <Button
+                      size="lg"
+                      disabled={!agentSessionId}
+                      onClick={confirmSettlement}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_30px_rgba(16,185,129,0.2)] border-0 disabled:opacity-60"
+                    >
+                      <Coins className="mr-2 h-5 w-5" />
+                      发起结算
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="glass-panel text-white/70"
+                      onClick={resetDemo}
+                    >
+                      取消
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="lg"
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_30px_rgba(99,102,241,0.25)] border-0"
+                    onClick={() => !running && confirmStart()}
+                  >
+                    <ZapIcon className="mr-2 h-5 w-5 fill-current" />
+                    启动 AI 代理交易
+                  </Button>
+                )}
+              </div>
+            </Card>
+          </div>
+
+          {/* RIGHT COLUMN: Timeline & Status (3 cols) */}
+          <div className="space-y-6 lg:col-span-3">
+            <Card className="glass-panel border-white/5 h-full max-h-[calc(100vh-8rem)] overflow-hidden flex flex-col">
+              <CardHeader className="pb-3 shrink-0">
+                <CardTitle className="text-base font-medium text-indigo-100/90 flex items-center gap-2">
+                  <Cable className="h-4 w-4" />
+                  跨链时间线
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-y-auto space-y-4 pr-1 pt-1">
+                {timeline.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className={cn(
+                      "relative pl-6 pb-6 last:pb-0 border-l transition-colors duration-500",
+                      item.status === 'done' ? "border-emerald-500/30" :
+                        item.status === 'running' ? "border-indigo-500/50" : "border-white/10"
+                    )}
+                  >
+                    <div className={cn(
+                      "absolute -left-[5px] top-0 h-2.5 w-2.5 rounded-full ring-4 ring-black",
+                      item.status === 'done' ? "bg-emerald-400" :
+                        item.status === 'running' ? "bg-indigo-400 animate-pulse" :
+                          item.status === 'error' ? "bg-rose-400" : "bg-white/20"
+                    )} />
+
+                    <div className="flex flex-col gap-1">
+                      <span className={cn(
+                        "text-sm font-medium transition-colors",
+                        item.status === 'idle' ? "text-white/40" : "text-white/90"
+                      )}>
+                        {item.title}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="h-5 px-1.5 text-[10px] gap-1 bg-white/5">
+                          {chainIcon(item.chain)}
+                          {chainLabel(item.chain)}
+                        </Badge>
+                        {item.txHash && (
+                          <a href="#" className="text-[10px] text-indigo-400 hover:text-indigo-300 hover:underline font-mono">
+                            {item.txHash.slice(0, 8)}...
+                          </a>
+                        )}
+                      </div>
+                      {item.detail && (
+                        <div className="text-xs text-white/50 bg-white/5 rounded p-1.5 mt-1 border border-white/5">
+                          {item.detail}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
         </main>
       </div>
 
+      {/* Modals and Overlays */}
+      {/* ... existing modal code (MarketModal, ToolModal) ... */}
       <AnimatePresence>
         {chatModalOpen ? (
           <motion.div
@@ -1695,7 +1695,7 @@ export default function DemoApp() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md"
             onMouseDown={(e) => {
               if (e.target === e.currentTarget) setMarketModalOpen(false);
             }}
@@ -1706,16 +1706,21 @@ export default function DemoApp() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.98 }}
                 transition={{ duration: 0.18 }}
-                className="w-full max-w-5xl"
+                className="w-full max-w-6xl max-h-[85vh] flex flex-col glass-panel overflow-hidden border-white/10 shadow-2xl"
               >
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <div className="text-sm text-white/75">电商市场（弹出窗口）</div>
+                <div className="flex items-center justify-between gap-2 p-4 border-b border-white/10 bg-white/5">
+                  <div className="flex items-center gap-2">
+                    <StoreIcon className="h-5 w-5 text-indigo-300" />
+                    <div className="text-sm font-medium text-white/90">Universal Market</div>
+                  </div>
                   <Button variant="secondary" size="sm" onClick={() => setMarketModalOpen(false)}>
                     <X className="h-4 w-4" />
                     关闭
                   </Button>
                 </div>
-                <div className="overflow-hidden">{renderMarketplacePanel("modal")}</div>
+                <div className="overflow-hidden flex-1 p-0 bg-black/40">
+                  {renderMarketplacePanel("modal")}
+                </div>
               </motion.div>
             </div>
           </motion.div>
@@ -1729,7 +1734,7 @@ export default function DemoApp() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md"
             onMouseDown={(e) => {
               if (e.target === e.currentTarget) {
                 setToolModal(null);
@@ -1744,87 +1749,60 @@ export default function DemoApp() {
                 exit={{ opacity: 0, y: 10, scale: 0.98 }}
                 transition={{ duration: 0.18 }}
                 className={cn(
-                  "w-full",
-                  toolModalMaximized ? "max-w-none" : "max-w-5xl"
+                  "w-full glass-panel border-white/10 shadow-2xl overflow-hidden",
+                  toolModalMaximized ? "max-w-[95vw] h-[90vh]" : "max-w-4xl"
                 )}
               >
-                <Card
-                  className={cn(
-                    "overflow-hidden border-white/10 bg-black/30",
-                    toolModalMaximized && "max-h-[90vh]"
-                  )}
-                >
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <CardTitle className="flex items-center gap-2">
-                          <Command className="h-4 w-4 text-indigo-200" />
-                          工具调用详情
-                        </CardTitle>
-                        <CardDescription className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-white/80">{toolModal.name}</span>
-                          <span className="text-white/30">|</span>
-                          <span className="font-mono text-white/60">{formatTime(toolModal.ts)}</span>
-                          {toolModal.stage ? (
-                            <>
-                              <span className="text-white/30">|</span>
-                              <Badge className={chatStageBadgeClass(normalizeChatStage(toolModal.stage))}>
-                                {chatStageLabel(normalizeChatStage(toolModal.stage))}
-                              </Badge>
-                            </>
-                          ) : null}
-                        </CardDescription>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setToolModalMaximized((v) => !v)}
-                        >
-                          <Maximize2 className="h-4 w-4" />
-                          {toolModalMaximized ? "还原" : "放大"}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => {
-                            setToolModal(null);
-                            setToolModalMaximized(false);
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                          关闭
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium text-white/70">输入（args）</div>
-                          <pre
-                            className={cn(
-                            "overflow-auto rounded-2xl bg-black/35 p-3 text-xs text-white/80 whitespace-pre-wrap break-all",
-                              toolModalMaximized ? "max-h-[70vh]" : "max-h-[55vh]"
-                            )}
-                          >
-                            {stringifyForDisplay(toolModal.args, true)}
-                          </pre>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium text-white/70">输出（result）</div>
-                          <pre
-                            className={cn(
-                            "overflow-auto rounded-2xl bg-black/35 p-3 text-xs text-white/80 whitespace-pre-wrap break-all",
-                              toolModalMaximized ? "max-h-[70vh]" : "max-h-[55vh]"
-                            )}
-                          >
-                            {stringifyForDisplay(toolModal.result ?? null, true)}
-                          </pre>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <div className="flex items-center justify-between p-4 border-b border-white/10 bg-white/5">
+                  <div className="flex items-center gap-2">
+                    <Command className="h-5 w-5 text-indigo-300" />
+                    <span className="font-mono text-sm font-medium">{toolModal.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setToolModalMaximized((v) => !v)}
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setToolModal(null);
+                        setToolModalMaximized(false);
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                      关闭
+                    </Button>
+                  </div>
+                </div>
+                <div className="p-4 grid gap-4 md:grid-cols-2 flex-1 overflow-auto bg-black/40">
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-white/70">输入（args）</div>
+                    <pre
+                      className={cn(
+                        "overflow-auto rounded-2xl bg-black/35 p-3 text-xs text-white/80 whitespace-pre-wrap break-all border border-white/5",
+                        toolModalMaximized ? "max-h-[70vh]" : "max-h-[55vh]"
+                      )}
+                    >
+                      {stringifyForDisplay(toolModal.args, true)}
+                    </pre>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-white/70">输出（result）</div>
+                    <pre
+                      className={cn(
+                        "overflow-auto rounded-2xl bg-black/35 p-3 text-xs text-white/80 whitespace-pre-wrap break-all border border-white/5",
+                        toolModalMaximized ? "max-h-[70vh]" : "max-h-[55vh]"
+                      )}
+                    >
+                      {stringifyForDisplay(toolModal.result ?? null, true)}
+                    </pre>
+                  </div>
+                </div>
               </motion.div>
             </div>
           </motion.div>
