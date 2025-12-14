@@ -42,6 +42,15 @@ The hackathon UI is designed to be "agent-adapted": the frontend consumes a sing
 - Action endpoint (confirm flow): `apps/web/src/app/api/agent/action/route.ts`
   - `POST /api/agent/action` with `{ sessionId, action: "confirm_settlement" }`
 
+## Market Site (apps/market)
+
+`apps/market` is a standalone market website (default port **3001**) that focuses on being agent-friendly (discovery/auth/tools) while still offering a human browsing UI.
+
+- Discovery: `GET /.well-known/universal-ai-market.json`
+- Auth (MVP): `POST /api/auth/challenge` → `POST /api/auth/verify` (EIP-191 message signature)
+- Tools: `GET/POST /api/agent/tool`
+- Settlement stream: `GET /api/settle/stream`
+
 ## External LangChain Agent (apps/agent)
 
 There is also an optional standalone agent service (for running a LangChain agent on your machine) under `apps/agent`.

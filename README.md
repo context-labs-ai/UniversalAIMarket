@@ -138,6 +138,13 @@ There is a starter LangChain agent service under `apps/agent`:
 - Install: `pnpm -C apps/agent install`
 - Run: `pnpm agent:dev`
 
+### Standalone Market site (apps/market)
+
+For the “agent-friendly e-commerce” idea, there is also a standalone market website under `apps/market` (default port **3001**):
+
+- Run: `pnpm -C apps/market install` then `pnpm market:dev`
+- Discovery: `GET http://localhost:3001/.well-known/universal-ai-market.json`
+
 ### Expected Output
 
 ```

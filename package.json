@@ -28,6 +28,11 @@
     "web:build": "pnpm -C apps/web build",
     "web:lint": "pnpm -C apps/web lint",
 
+    "market:dev": "pnpm -C apps/market dev",
+    "market:build": "pnpm -C apps/market build",
+    "market:start": "pnpm -C apps/market start",
+    "market:lint": "pnpm -C apps/market lint",
+
     "agent:dev": "pnpm -C apps/agent dev",
     "agent:build": "pnpm -C apps/agent build",
     "agent:start": "pnpm -C apps/agent start",
