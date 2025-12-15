@@ -109,10 +109,6 @@ pnpm market:dev
 └── scripts/               # 部署和演示脚本
 ```
 
-## 团队
-
-ZetaGen
-
 ## 相关链接
 
 - [ZetaChain 文档](https://www.zetachain.com/docs)
