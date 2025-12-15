@@ -2,8 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { STORES } from "@/lib/catalog";
 
-export default function StorePage({ params }: { params: { storeId: string } }) {
-  const store = STORES.find((s) => s.id === params.storeId);
+type PageProps = {
+  params: Promise<{ storeId: string }>;
+};
+
+export default async function StorePage({ params }: PageProps) {
+  const { storeId } = await params;
+  const store = STORES.find((s) => s.id === storeId);
   if (!store) return notFound();
 
   return (

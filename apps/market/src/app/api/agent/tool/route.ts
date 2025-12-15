@@ -38,6 +38,216 @@ function requireAuthIfEnabled(req: Request) {
   return { ok: true as const, session };
 }
 
+const TOOL_DEFINITIONS = [
+  {
+    name: "search_stores",
+    description: "Search stores in the marketplace catalog by keyword. Returns matched stores sorted by relevance.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search keyword (e.g., 'weapon', 'coffee', 'NFT')",
+        },
+        limit: {
+          type: "integer",
+          description: "Maximum number of results to return",
+          default: 5,
+          minimum: 1,
+          maximum: 20,
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "search_products",
+    description: "Search products within a specific store by keyword.",
+    parameters: {
+      type: "object",
+      properties: {
+        storeId: {
+          type: "string",
+          description: "The store ID to search within (e.g., 'polyguns-armory')",
+        },
+        query: {
+          type: "string",
+          description: "Search keyword for products",
+        },
+        limit: {
+          type: "integer",
+          description: "Maximum number of results to return",
+          default: 5,
+          minimum: 1,
+          maximum: 20,
+        },
+      },
+      required: ["storeId"],
+    },
+  },
+  {
+    name: "search_all_products",
+    description: "Search products across all stores in the marketplace. Useful for finding specific items without knowing which store has them.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search keyword for products",
+        },
+        limit: {
+          type: "integer",
+          description: "Maximum number of results to return",
+          default: 10,
+          minimum: 1,
+          maximum: 50,
+        },
+        filters: {
+          type: "object",
+          description: "Optional filters to narrow down results",
+          properties: {
+            kind: {
+              type: "string",
+              enum: ["digital", "physical"],
+              description: "Filter by product type",
+            },
+            minPrice: {
+              type: "string",
+              description: "Minimum price in USDC",
+            },
+            maxPrice: {
+              type: "string",
+              description: "Maximum price in USDC",
+            },
+            demoReady: {
+              type: "boolean",
+              description: "Only show products ready for testnet demo",
+            },
+            inventory: {
+              type: "string",
+              enum: ["in_stock", "limited", "preorder"],
+              description: "Filter by inventory status",
+            },
+          },
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_store",
+    description: "Get detailed information about a specific store by its ID.",
+    parameters: {
+      type: "object",
+      properties: {
+        storeId: {
+          type: "string",
+          description: "The store ID (e.g., 'polyguns-armory', 'crosschain-coffee')",
+        },
+      },
+      required: ["storeId"],
+    },
+  },
+  {
+    name: "get_product",
+    description: "Get detailed information about a specific product by store ID and product ID.",
+    parameters: {
+      type: "object",
+      properties: {
+        storeId: {
+          type: "string",
+          description: "The store ID containing the product",
+        },
+        productId: {
+          type: "string",
+          description: "The product ID (e.g., 'weapon-soulbound-sword')",
+        },
+      },
+      required: ["storeId", "productId"],
+    },
+  },
+  {
+    name: "list_categories",
+    description: "List all available product categories in the marketplace with store counts.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "prepare_deal",
+    description: "Create a cross-chain settlement deal payload. Computes the dealId hash for the given parameters. Use this before calling settle_deal.",
+    parameters: {
+      type: "object",
+      properties: {
+        buyer: {
+          type: "string",
+          description: "Buyer's Ethereum address (will receive NFT on Polygon)",
+        },
+        sellerBase: {
+          type: "string",
+          description: "Seller's address on Base chain (will receive USDC payment)",
+        },
+        polygonEscrow: {
+          type: "string",
+          description: "Escrow contract address on Polygon holding the NFT",
+        },
+        nft: {
+          type: "string",
+          description: "NFT contract address on Polygon",
+        },
+        tokenId: {
+          type: ["integer", "string"],
+          description: "Token ID of the NFT to be transferred",
+        },
+        priceUSDC: {
+          type: "string",
+          description: "Price in USDC (e.g., '80' for 80 USDC)",
+        },
+        deadlineSecondsFromNow: {
+          type: "integer",
+          description: "Deal expiration in seconds from now",
+          default: 3600,
+          minimum: 60,
+        },
+      },
+      required: ["buyer", "sellerBase", "polygonEscrow", "nft", "tokenId", "priceUSDC"],
+    },
+  },
+  {
+    name: "settle_deal",
+    description: "Returns a settlement SSE stream URL for executing a prepared deal. Connect to the URL to receive real-time progress updates.",
+    parameters: {
+      type: "object",
+      properties: {
+        mode: {
+          type: "string",
+          enum: ["testnet", "simulate"],
+          description: "Settlement mode: 'testnet' for real transactions, 'simulate' for demo",
+          default: "simulate",
+        },
+        deal: {
+          type: "object",
+          description: "The serialized deal object from prepare_deal result",
+          properties: {
+            dealId: { type: "string" },
+            buyer: { type: "string" },
+            sellerBase: { type: "string" },
+            polygonEscrow: { type: "string" },
+            nft: { type: "string" },
+            tokenId: { type: "string" },
+            price: { type: "string" },
+            deadline: { type: "string" },
+          },
+          required: ["dealId", "buyer", "sellerBase", "polygonEscrow", "nft", "tokenId", "price", "deadline"],
+        },
+      },
+      required: ["deal"],
+    },
+  },
+];
+
 export async function GET(req: Request) {
   const auth = requireAuthIfEnabled(req);
   if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: 401 });
@@ -45,36 +255,7 @@ export async function GET(req: Request) {
   return Response.json({
     ok: true,
     authRequired: isAuthRequired(),
-    tools: [
-      {
-        name: "search_stores",
-        description: "Search stores in the marketplace catalog.",
-        args: { query: "string", limit: "number" },
-      },
-      {
-        name: "search_products",
-        description: "Search products within a store.",
-        args: { storeId: "string", query: "string", limit: "number" },
-      },
-      {
-        name: "prepare_deal",
-        description: "Create a cross-chain settlement deal payload (computes dealId).",
-        args: {
-          buyer: "address",
-          sellerBase: "address",
-          polygonEscrow: "address",
-          nft: "address",
-          tokenId: "number|string",
-          priceUSDC: "string",
-          deadlineSecondsFromNow: "number",
-        },
-      },
-      {
-        name: "settle_deal",
-        description: "Returns a settlement SSE URL for a prepared deal.",
-        args: { mode: "\"testnet\"|\"simulate\"", deal: "SerializedDeal" },
-      },
-    ],
+    tools: TOOL_DEFINITIONS,
   });
 }
 
@@ -162,6 +343,156 @@ export async function POST(req: Request) {
             highlights: product.highlights,
             tags: product.tags,
           })),
+        },
+      });
+    }
+
+    if (name === "search_all_products") {
+      const query = typeof args.query === "string" ? args.query : "";
+      const limitRaw = typeof args.limit === "number" ? args.limit : 10;
+      const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(50, limitRaw)) : 10;
+      const filters = typeof args.filters === "object" && args.filters !== null ? args.filters : {};
+
+      type ProductWithStore = {
+        product: (typeof STORES)[0]["products"][0];
+        store: (typeof STORES)[0];
+        score: number;
+      };
+
+      const allProducts: ProductWithStore[] = [];
+      for (const store of STORES) {
+        for (const product of store.products) {
+          if (filters.kind && product.kind !== filters.kind) continue;
+          if (filters.demoReady !== undefined && product.demoReady !== filters.demoReady) continue;
+          if (filters.inventory && product.inventory !== filters.inventory) continue;
+          if (filters.minPrice && parseFloat(product.priceUSDC) < parseFloat(filters.minPrice)) continue;
+          if (filters.maxPrice && parseFloat(product.priceUSDC) > parseFloat(filters.maxPrice)) continue;
+
+          const content = `${product.name} ${product.description} ${product.tags.join(" ")} ${product.highlights.join(" ")}`;
+          allProducts.push({ product, store, score: scoreText(content, query) });
+        }
+      }
+
+      allProducts.sort((a, b) => b.score - a.score);
+
+      return Response.json({
+        ok: true,
+        result: {
+          total: allProducts.length,
+          products: allProducts.slice(0, limit).map(({ product, store }) => ({
+            id: product.id,
+            name: product.name,
+            kind: product.kind,
+            description: product.description,
+            priceUSDC: product.priceUSDC,
+            tokenId: product.tokenId,
+            demoReady: product.demoReady,
+            inventory: product.inventory,
+            leadTime: product.leadTime,
+            highlights: product.highlights,
+            tags: product.tags,
+            store: {
+              id: store.id,
+              name: store.name,
+              verified: store.verified,
+            },
+          })),
+        },
+      });
+    }
+
+    if (name === "get_store") {
+      const storeId = typeof args.storeId === "string" ? args.storeId : "";
+      const store = STORES.find((s) => s.id === storeId);
+      if (!store) throw new Error("Store not found");
+
+      return Response.json({
+        ok: true,
+        result: {
+          id: store.id,
+          name: store.name,
+          tagline: store.tagline,
+          location: store.location,
+          verified: store.verified,
+          rating: store.rating,
+          orders: store.orders,
+          responseMins: store.responseMins,
+          categories: store.categories,
+          sellerAgentName: store.sellerAgentName,
+          sellerStyle: store.sellerStyle,
+          productCount: store.products.length,
+          products: store.products.map((p) => ({
+            id: p.id,
+            name: p.name,
+            kind: p.kind,
+            priceUSDC: p.priceUSDC,
+            demoReady: p.demoReady,
+            inventory: p.inventory,
+          })),
+        },
+      });
+    }
+
+    if (name === "get_product") {
+      const storeId = typeof args.storeId === "string" ? args.storeId : "";
+      const productId = typeof args.productId === "string" ? args.productId : "";
+
+      const store = STORES.find((s) => s.id === storeId);
+      if (!store) throw new Error("Store not found");
+
+      const product = store.products.find((p) => p.id === productId);
+      if (!product) throw new Error("Product not found");
+
+      return Response.json({
+        ok: true,
+        result: {
+          id: product.id,
+          name: product.name,
+          kind: product.kind,
+          description: product.description,
+          priceUSDC: product.priceUSDC,
+          tokenId: product.tokenId,
+          demoReady: product.demoReady,
+          inventory: product.inventory,
+          leadTime: product.leadTime,
+          highlights: product.highlights,
+          tags: product.tags,
+          store: {
+            id: store.id,
+            name: store.name,
+            verified: store.verified,
+            sellerAgentName: store.sellerAgentName,
+          },
+        },
+      });
+    }
+
+    if (name === "list_categories") {
+      const categoryMap = new Map<string, { count: number; stores: string[] }>();
+
+      for (const store of STORES) {
+        for (const category of store.categories) {
+          const existing = categoryMap.get(category);
+          if (existing) {
+            existing.count++;
+            if (!existing.stores.includes(store.id)) {
+              existing.stores.push(store.id);
+            }
+          } else {
+            categoryMap.set(category, { count: 1, stores: [store.id] });
+          }
+        }
+      }
+
+      const categories = Array.from(categoryMap.entries())
+        .map(([name, data]) => ({ name, storeCount: data.stores.length, stores: data.stores }))
+        .sort((a, b) => b.storeCount - a.storeCount);
+
+      return Response.json({
+        ok: true,
+        result: {
+          total: categories.length,
+          categories,
         },
       });
     }

@@ -48,3 +48,7 @@ deployed.json
 # Misc
 *.tgz
 .tsbuildinfo
+
+# doc
+AGENTS.md
+CLAUDE.md

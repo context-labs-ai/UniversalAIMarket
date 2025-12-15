@@ -1,35 +1,61 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { STORES } from "@/lib/catalog";
+import { SearchBar } from "@/components/SearchBar";
+import { CategoryFilter } from "@/components/CategoryFilter";
+import { CartButton } from "@/components/CartButton";
 
-export default function HomePage() {
+type PageProps = {
+  searchParams: Promise<{ category?: string }>;
+};
+
+export default async function HomePage({ searchParams }: PageProps) {
+  const { category } = await searchParams;
+
+  const filteredStores = category
+    ? STORES.filter((store) => store.categories.includes(category))
+    : STORES;
+
   return (
     <main className="mx-auto max-w-6xl px-5 py-10">
-      <header className="flex flex-col gap-2">
+      <header className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <h1 className="text-2xl font-semibold tracking-tight">Universal AI Market</h1>
-          <Link
-            className="glass-panel rounded-lg px-3 py-1.5 text-sm text-white/80 hover:text-white"
-            href="/agent"
-          >
-            Agent 接入
-          </Link>
-        </div>
-        <p className="text-sm text-white/60">
-          这是独立 Market 站点（端口 3001）：人类可浏览，Agent 可通过 discovery/auth/tools 接入。
-        </p>
-      </header>
-
-      <section className="mt-8">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="text-base font-medium text-white/90">精选店铺</h2>
-          <div className="text-xs text-white/50">
-            discovery:{" "}
-            <code className="font-mono text-white/70">/.well-known/universal-ai-market.json</code>
+          <div className="flex items-center gap-2">
+            <CartButton />
+            <Link
+              className="glass-panel rounded-lg px-3 py-1.5 text-sm text-white/80 hover:text-white"
+              href="/agent"
+            >
+              Agent 接入
+            </Link>
           </div>
         </div>
 
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <SearchBar />
+          <div className="text-xs text-white/50 shrink-0">
+            <code className="font-mono text-white/70">/.well-known/universal-ai-market.json</code>
+          </div>
+        </div>
+      </header>
+
+      <section className="mt-6">
+        <Suspense fallback={<div className="h-10" />}>
+          <CategoryFilter currentCategory={category} />
+        </Suspense>
+      </section>
+
+      <section className="mt-6">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-base font-medium text-white/90">
+            {category ? `${category} 店铺` : "精选店铺"}
+          </h2>
+          <span className="text-xs text-white/50">{filteredStores.length} 家店铺</span>
+        </div>
+
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {STORES.map((store) => (
+          {filteredStores.map((store) => (
             <Link
               key={store.id}
               href={`/store/${store.id}`}
@@ -71,6 +97,12 @@ export default function HomePage() {
             </Link>
           ))}
         </div>
+
+        {filteredStores.length === 0 && (
+          <div className="mt-10 text-center text-sm text-white/50">
+            该分类暂无店铺
+          </div>
+        )}
       </section>
 
       <footer className="mt-10 text-xs text-white/45">
