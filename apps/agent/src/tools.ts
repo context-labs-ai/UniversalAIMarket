@@ -1,18 +1,19 @@
 import { z } from "zod";
 import type { DynamicStructuredTool } from "@langchain/core/tools";
 import { DynamicStructuredTool as Tool } from "@langchain/core/tools";
+import { MarketClient } from "./marketClient.js";
 
-type ToolCallResult = { ok: boolean; result?: unknown; error?: string };
+function isPresent(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
 
 export async function invokeToolBridge(webBaseUrl: string, name: string, args: unknown) {
-  const res = await fetch(new URL("/api/agent/tool", webBaseUrl), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, args }),
+  const client = new MarketClient({
+    baseUrl: webBaseUrl,
+    agentId: isPresent(process.env.AGENT_ID) ? process.env.AGENT_ID : undefined,
+    agentPrivateKey: isPresent(process.env.AGENT_PRIVATE_KEY) ? process.env.AGENT_PRIVATE_KEY : undefined,
   });
-  const json = (await res.json().catch(() => null)) as ToolCallResult | null;
-  if (!res.ok || !json?.ok) throw new Error(json?.error || `Tool ${name} failed`);
-  return json.result;
+  return client.invokeTool(name, args);
 }
 
 export type ToolBridgeContext = {
@@ -21,6 +22,12 @@ export type ToolBridgeContext = {
 };
 
 export function buildTools(ctx: ToolBridgeContext): DynamicStructuredTool[] {
+  const client = new MarketClient({
+    baseUrl: ctx.webBaseUrl,
+    agentId: isPresent(process.env.AGENT_ID) ? process.env.AGENT_ID : undefined,
+    agentPrivateKey: isPresent(process.env.AGENT_PRIVATE_KEY) ? process.env.AGENT_PRIVATE_KEY : undefined,
+  });
+
   const searchStores = new Tool({
     name: "search_stores",
     description: "Search stores in the marketplace catalog.",
@@ -29,7 +36,7 @@ export function buildTools(ctx: ToolBridgeContext): DynamicStructuredTool[] {
       limit: z.number(),
     }),
     func: async (args) => {
-      const result = await invokeToolBridge(ctx.webBaseUrl, "search_stores", args);
+      const result = await client.invokeTool("search_stores", args);
       ctx.onToolResult?.("search_stores", result);
       return JSON.stringify(result);
     },
@@ -44,7 +51,7 @@ export function buildTools(ctx: ToolBridgeContext): DynamicStructuredTool[] {
       limit: z.number(),
     }),
     func: async (args) => {
-      const result = await invokeToolBridge(ctx.webBaseUrl, "search_products", args);
+      const result = await client.invokeTool("search_products", args);
       ctx.onToolResult?.("search_products", result);
       return JSON.stringify(result);
     },
@@ -63,7 +70,7 @@ export function buildTools(ctx: ToolBridgeContext): DynamicStructuredTool[] {
       deadlineSecondsFromNow: z.number(),
     }),
     func: async (args) => {
-      const result = await invokeToolBridge(ctx.webBaseUrl, "prepare_deal", args);
+      const result = await client.invokeTool("prepare_deal", args);
       ctx.onToolResult?.("prepare_deal", result);
       return JSON.stringify(result);
     },
@@ -77,11 +84,27 @@ export function buildTools(ctx: ToolBridgeContext): DynamicStructuredTool[] {
       deal: z.any(),
     }),
     func: async (args) => {
-      const result = await invokeToolBridge(ctx.webBaseUrl, "settle_deal", args);
+      const result = await client.invokeTool("settle_deal", args);
       ctx.onToolResult?.("settle_deal", result);
       return JSON.stringify(result);
     },
   });
 
-  return [searchStores, searchProducts, prepareDeal, settleDeal];
+  const sellerAgentChat = new Tool({
+    name: "seller_agent_chat",
+    description: "Chat with a store's seller customer-support agent (ask questions / negotiate).",
+    schema: z.object({
+      storeId: z.string(),
+      message: z.string(),
+      productId: z.string().nullable(),
+      conversationId: z.string().nullable(),
+    }),
+    func: async (args) => {
+      const result = await client.invokeTool("seller_agent_chat", args);
+      ctx.onToolResult?.("seller_agent_chat", result);
+      return JSON.stringify(result);
+    },
+  });
+
+  return [searchStores, searchProducts, prepareDeal, settleDeal, sellerAgentChat];
 }

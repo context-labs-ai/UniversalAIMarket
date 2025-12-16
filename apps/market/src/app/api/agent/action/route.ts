@@ -1,4 +1,4 @@
-import { resolveConfirm, rejectConfirm, hasSession } from "@/lib/agentSessions";
+import { resolveConfirm } from "@/lib/agentSessions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,13 +18,33 @@ export async function POST(req: Request) {
   const obj = body as Record<string, unknown>;
   const sessionId = typeof obj.sessionId === "string" ? obj.sessionId : "";
   const action = typeof obj.action === "string" ? obj.action : "";
+  const upstream = typeof obj.upstream === "string" ? obj.upstream : "";
 
-  if (!sessionId) {
-    return Response.json({ ok: false, error: "Missing sessionId" }, { status: 400 });
-  }
+  if (!sessionId) return new Response("Missing sessionId", { status: 400 });
 
-  if (!hasSession(sessionId)) {
-    return Response.json({ ok: false, error: "Session not found or expired" }, { status: 404 });
+  // If an upstream Agent endpoint is provided, proxy the action to that service.
+  // This keeps the browser request same-origin (no CORS) while still supporting external agent servers.
+  if (upstream) {
+    let upstreamUrl: URL;
+    try {
+      upstreamUrl = new URL(upstream);
+    } catch {
+      return new Response("Invalid upstream", { status: 400 });
+    }
+
+    upstreamUrl.search = "";
+    upstreamUrl.pathname = "/api/agent/action";
+
+    const res = await fetch(upstreamUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, action }),
+      signal: req.signal,
+    });
+
+    const contentType = res.headers.get("content-type") || "application/json; charset=utf-8";
+    const payload = await res.text();
+    return new Response(payload, { status: res.status, headers: { "Content-Type": contentType } });
   }
 
   if (action === "confirm_settlement") {
@@ -32,10 +52,5 @@ export async function POST(req: Request) {
     return Response.json({ ok });
   }
 
-  if (action === "cancel_settlement") {
-    const ok = rejectConfirm(sessionId, "User cancelled");
-    return Response.json({ ok, cancelled: true });
-  }
-
-  return Response.json({ ok: false, error: "Unknown action" }, { status: 400 });
+  return new Response("Unknown action", { status: 400 });
 }

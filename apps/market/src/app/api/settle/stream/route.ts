@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { decodeBase64Url } from "@/lib/base64url";
 import { encodeDealPayload, type Deal } from "@/lib/deal";
+import { getSessionFromRequest, isAuthRequired } from "@/lib/agentAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -102,6 +103,10 @@ export async function GET(req: Request) {
   const modeParam = url.searchParams.get("mode");
   const mode: DemoMode = modeParam === "testnet" ? "testnet" : "simulate";
   const dealEncoded = url.searchParams.get("deal");
+
+  if (mode === "testnet" && isAuthRequired() && !getSessionFromRequest(req)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
 
   if (!dealEncoded) {
     return new Response("缺少 deal 参数", { status: 400 });
@@ -349,4 +354,3 @@ export async function GET(req: Request) {
     },
   });
 }
-

@@ -23,24 +23,11 @@ Use `pnpm` (Node.js >= 18).
 - `pnpm localnet:start` start ZetaChain localnet (requires Foundry/anvil)
 - `pnpm deploy:local` deploy to localnet (`--network localhost`)
 - `pnpm demo:phase1` run the local end-to-end demo
-- `pnpm web:dev` run the Next.js demo UI (`apps/web`)
-- `pnpm web:lint` lint the Next.js app
-- `pnpm web:build` build the Next.js app
+- `pnpm market:dev` run the market UI (`apps/market`)
+- `pnpm market:lint` lint the market app
+- `pnpm market:build` build the market app
 - `pnpm lint` run ESLint over `.ts`
 - `pnpm format` format via Prettier
-
-## Web Agent Demo (apps/web)
-
-The hackathon UI is designed to be "agent-adapted": the frontend consumes a single Agent SSE stream that includes chat + tool calls + cross-chain timeline.
-
-- Agent SSE entry: `apps/web/src/app/api/agent/stream/route.ts`
-  - Built-in demo: `GET /api/agent/stream?engine=builtin`
-  - Proxy to external LangChain agent: `GET /api/agent/stream?engine=proxy&upstream=http://localhost:8080/api/agent/stream`
-- Tool endpoint (for external agents): `apps/web/src/app/api/agent/tool/route.ts`
-  - `GET /api/agent/tool` returns tool schema list
-  - `POST /api/agent/tool` executes tools (`search_stores`, `search_products`, `prepare_deal`, `settle_deal`)
-- Action endpoint (confirm flow): `apps/web/src/app/api/agent/action/route.ts`
-  - `POST /api/agent/action` with `{ sessionId, action: "confirm_settlement" }`
 
 ## Market Site (apps/market)
 
@@ -51,13 +38,32 @@ The hackathon UI is designed to be "agent-adapted": the frontend consumes a sing
 - Tools: `GET/POST /api/agent/tool`
 - Settlement stream: `GET /api/settle/stream`
 
-## External LangChain Agent (apps/agent)
+## Buyer Agent Hub (apps/agent)
 
-There is also an optional standalone agent service (for running a LangChain agent on your machine) under `apps/agent`.
+Standalone buyer agent service (LangChain-based) under `apps/agent`. Acts as the hub for multi-agent negotiation.
 
-- SSE entry: `apps/agent/src/index.ts` (`GET /api/agent/stream`)
-- Confirm action: `apps/agent/src/index.ts` (`POST /api/agent/action`)
-- It calls the web tool bridge at `apps/web/src/app/api/agent/tool/route.ts`
+- Port: **8080**
+- SSE entry: `GET /api/agent/stream`
+- Run trigger: `POST /api/agent/run`
+- Confirm action: `POST /api/agent/action`
+- AG-UI entry: `POST /api/agui/run`
+- **LLM Startup Test**: Auto-tests LLM connectivity and falls back to templates if unavailable
+
+## Seller Agent Services (apps/seller-agent)
+
+Standalone seller customer-service agents under `apps/seller-agent`. Each instance represents one seller persona.
+
+- Port A: **8081** (aggressive style)
+- Port B: **8082** (pro style)
+- Endpoint: `POST /api/seller/chat`
+- Health: `GET /health` (returns `llmAvailable` status)
+- **LLM Startup Test**: Auto-tests LLM connectivity and falls back to templates if unavailable
+
+Run two instances:
+```bash
+pnpm -C apps/seller-agent dev:a  # Seller A (aggressive)
+pnpm -C apps/seller-agent dev:b  # Seller B (pro)
+```
 
 ### Event protocol stability
 
@@ -67,7 +73,7 @@ Keep these SSE event names stable so the UI and external agents stay compatible:
 
 ### Session storage note
 
-`apps/web/src/lib/agentSessions.ts` stores confirmation sessions in-memory (sufficient for local/hackathon demos). If deploying serverless/multi-instance, replace with shared storage.
+`apps/market/src/lib/agentSessions.ts` stores confirmation sessions in-memory (sufficient for local/hackathon demos). If deploying serverless/multi-instance, replace with shared storage.
 
 ## Coding Style & Naming Conventions
 

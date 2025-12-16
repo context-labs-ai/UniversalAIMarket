@@ -24,10 +24,6 @@
     "demo:phase1": "hardhat run scripts/demo/phase1_demo.ts --network localhost",
     "demo:phase1:testnet": "hardhat run scripts/demo/phase1_demo.ts --network baseSepolia",
 
-    "web:dev": "pnpm -C apps/web dev",
-    "web:build": "pnpm -C apps/web build",
-    "web:lint": "pnpm -C apps/web lint",
-
     "market:dev": "pnpm -C apps/market dev",
     "market:build": "pnpm -C apps/market build",
     "market:start": "pnpm -C apps/market start",
@@ -36,6 +32,11 @@
     "agent:dev": "pnpm -C apps/agent dev",
     "agent:build": "pnpm -C apps/agent build",
     "agent:start": "pnpm -C apps/agent start",
+    "agent:cli": "pnpm -C apps/agent cli",
+
+    "seller:dev": "pnpm -C apps/seller-agent dev",
+    "seller:build": "pnpm -C apps/seller-agent build",
+    "seller:start": "pnpm -C apps/seller-agent start",
     
     "lint": "eslint . --ext .ts",
     "format": "prettier --write ."

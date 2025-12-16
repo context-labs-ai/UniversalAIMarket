@@ -3,8 +3,9 @@ import type { TimelineStep, TimelineChain, TimelineStatus } from "./agentContext
 /**
  * Timeline Step Definitions
  *
- * The Agent flow consists of 8 steps across 4 chains:
+ * The Agent flow consists of 9 steps across 4 chains:
  * - offchain: Discovery, browsing, negotiation, deal preparation
+ * - offchain: Optional confirm (manual checkout)
  * - baseSepolia: USDC approval and deposit
  * - zetaAthens: Cross-chain orchestration
  * - polygonAmoy: NFT delivery
@@ -15,6 +16,7 @@ export type TimelineStepId =
   | "browse"
   | "negotiate"
   | "prepare"
+  | "confirm"
   | "approve"
   | "deposit"
   | "orchestrate"
@@ -29,7 +31,7 @@ export interface TimelineStepDefinition {
 }
 
 /**
- * All 8 timeline steps in execution order
+ * All 9 timeline steps in execution order
  */
 export const TIMELINE_STEPS: TimelineStepDefinition[] = [
   {
@@ -59,6 +61,13 @@ export const TIMELINE_STEPS: TimelineStepDefinition[] = [
     titleZh: "准备交易",
     chain: "offchain",
     description: "Generating deal parameters and signatures",
+  },
+  {
+    id: "confirm",
+    title: "Confirm Settlement",
+    titleZh: "确认并发起结算",
+    chain: "offchain",
+    description: "Waiting for user confirmation before settlement",
   },
   {
     id: "approve",
@@ -154,7 +163,7 @@ export const STATUS_CONFIG: Record<
 export function createInitialTimeline(): TimelineStep[] {
   return TIMELINE_STEPS.map((def) => ({
     id: def.id,
-    title: def.title,
+    title: def.titleZh,
     chain: def.chain,
     status: "idle" as TimelineStatus,
     ts: 0,

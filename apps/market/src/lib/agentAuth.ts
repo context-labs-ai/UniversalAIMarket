@@ -39,7 +39,7 @@ export function createChallenge(opts: {
   const agentAddress = normalizeAddress(opts.agentAddress);
 
   const messageToSign = [
-    "Universal AI Market — Agent Login",
+    "Universal AI Market - Agent Login",
     `origin: ${opts.origin}`,
     `agentId: ${opts.agentId}`,
     `agentAddress: ${agentAddress}`,
@@ -101,7 +101,7 @@ export function createSession(opts: { agentId: string; agentAddress: string; ttl
 export function getSessionFromRequest(req: Request) {
   const auth = req.headers.get("authorization") || req.headers.get("Authorization");
   if (!auth) return null;
-  const m = auth.match(/^Bearer\s+(.+)$/i);
+  const m = auth.match(/^Bearer\\s+(.+)$/i);
   if (!m) return null;
   const token = m[1].trim();
   const session = sessions.get(token);

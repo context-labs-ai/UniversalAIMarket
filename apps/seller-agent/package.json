@@ -1,29 +1,30 @@
 {
-  "name": "universal-ai-market-agent",
+  "name": "universal-ai-market-seller-agent",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "node --loader ts-node/esm --no-warnings src/index.ts",
-    "cli": "node --loader ts-node/esm --no-warnings src/cli.ts",
+    "dev:a": "cross-env DOTENV_CONFIG_PATH=.env.seller-a node --loader ts-node/esm --no-warnings src/index.ts",
+    "dev:b": "cross-env DOTENV_CONFIG_PATH=.env.seller-b node --loader ts-node/esm --no-warnings src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "start:a": "cross-env DOTENV_CONFIG_PATH=.env.seller-a node dist/index.js",
+    "start:b": "cross-env DOTENV_CONFIG_PATH=.env.seller-b node dist/index.js"
   },
   "dependencies": {
-    "@ag-ui/core": "0.0.42",
     "@langchain/core": "^0.3.0",
     "@langchain/openai": "^0.4.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "ethers": "^6.16.0",
     "express": "^4.21.2",
-    "langchain": "^0.3.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.30",
+    "cross-env": "^7.0.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
   },

@@ -7,26 +7,24 @@ export function AgentConnectButton() {
   const { connectionStatus, connect, toggleSidebar, isExpanded } = useAgent();
 
   const isConnected = connectionStatus !== "disconnected";
-  const isRunning = connectionStatus === "running" || connectionStatus === "discovering" || connectionStatus === "authenticating";
+  const isConnecting = connectionStatus === "discovering" || connectionStatus === "authenticating";
+  const isRunning = connectionStatus === "running" || isConnecting;
 
   const handleClick = () => {
-    if (isConnected) {
-      toggleSidebar();
-    } else {
-      connect();
-    }
+    // 无论是否连接，点击都打开/关闭侧边栏，让用户先配置再启动
+    toggleSidebar();
   };
 
   return (
     <button
       onClick={handleClick}
-      disabled={isRunning && !isExpanded}
+      disabled={isConnecting}
       className={clsx(
         "glass-panel relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors",
         isConnected
           ? "text-emerald-400 hover:text-emerald-300"
           : "text-white/80 hover:text-white",
-        isRunning && "cursor-wait"
+        isConnecting && "cursor-wait"
       )}
     >
       {/* Status indicator */}
@@ -50,7 +48,7 @@ export function AgentConnectButton() {
 
       {/* Label */}
       <span className="hidden sm:inline">
-        {connectionStatus === "disconnected" && "启动 Agent"}
+        {connectionStatus === "disconnected" && "Agent"}
         {connectionStatus === "discovering" && "发现服务..."}
         {connectionStatus === "authenticating" && "认证中..."}
         {connectionStatus === "connected" && "Agent 状态"}

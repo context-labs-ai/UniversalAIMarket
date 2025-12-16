@@ -21,6 +21,8 @@ export async function GET(req: Request) {
     endpoints: {
       config: new URL("/api/config", origin).toString(),
       tools: new URL("/api/agent/tool", origin).toString(),
+      agentStream: new URL("/api/agent/stream", origin).toString(),
+      agentAction: new URL("/api/agent/action", origin).toString(),
       settlementStream: new URL("/api/settle/stream", origin).toString(),
     },
     toolProtocol: {
@@ -33,4 +35,3 @@ export async function GET(req: Request) {
     ],
   });
 }
-

@@ -31,6 +31,26 @@ function serializeDeal(deal: Deal): SerializedDeal {
   };
 }
 
+function pseudoAddress(label: string) {
+  const hash = ethers.keccak256(ethers.toUtf8Bytes(`universal-ai-market:${label}`));
+  return ethers.getAddress(`0x${hash.slice(-40)}`);
+}
+
+function sellerAgentAddress(storeId: string) {
+  return pseudoAddress(`seller-agent:${storeId}`);
+}
+
+function sellerAgentMeta(store: (typeof STORES)[number], origin?: string) {
+  const chatEndpoint = origin ? new URL("/api/agent/tool", origin).toString() : "/api/agent/tool";
+  return {
+    id: store.sellerAgentId,
+    name: store.sellerAgentName,
+    address: sellerAgentAddress(store.id),
+    chatEndpoint,
+    chat: { tool: "seller_agent_chat" as const, args: { storeId: store.id } },
+  };
+}
+
 function requireAuthIfEnabled(req: Request) {
   if (!isAuthRequired()) return { ok: true as const, session: null as ReturnType<typeof getSessionFromRequest> };
   const session = getSessionFromRequest(req);
@@ -176,6 +196,21 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "seller_agent_chat",
+    description:
+      "Chat with a store's seller customer-support agent. Use this after you found a store/product and want to negotiate, ask questions, or confirm details.",
+    parameters: {
+      type: "object",
+      properties: {
+        storeId: { type: "string", description: "Store ID (from search_stores result)" },
+        message: { type: "string", description: "Your message to the seller agent" },
+        productId: { type: "string", description: "Optional product ID to give context" },
+        conversationId: { type: "string", description: "Optional conversation ID to continue a thread" },
+      },
+      required: ["storeId", "message"],
+    },
+  },
+  {
     name: "prepare_deal",
     description: "Create a cross-chain settlement deal payload. Computes the dealId hash for the given parameters. Use this before calling settle_deal.",
     parameters: {
@@ -249,9 +284,6 @@ const TOOL_DEFINITIONS = [
 ];
 
 export async function GET(req: Request) {
-  const auth = requireAuthIfEnabled(req);
-  if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: 401 });
-
   return Response.json({
     ok: true,
     authRequired: isAuthRequired(),
@@ -264,6 +296,54 @@ const BodySchema = z.object({
   args: z.record(z.string(), z.any()).default({}),
 });
 
+function buildSellerAgentReply({
+  store,
+  product,
+  message,
+}: {
+  store: (typeof STORES)[number];
+  product?: (typeof STORES)[number]["products"][number];
+  message: string;
+}) {
+  const text = message.toLowerCase();
+  const wantsDiscount = /便宜|优惠|砍价|降价|太贵|打折|discount|cheaper/.test(text);
+  const asksLeadTime = /发货|多久|交付|到货|物流|lead\s*time|shipping/.test(text);
+  const asksPrice = /多少钱|价格|price|how much/.test(text);
+
+  const styleFactor = store.sellerStyle === "strict" ? 0.95 : store.sellerStyle === "pro" ? 0.9 : 0.85;
+
+  const basePrice = product ? Number(product.priceUSDC) : null;
+  const canPrice = basePrice !== null && Number.isFinite(basePrice);
+  const suggestedPrice = canPrice ? Math.max(0.01, Math.round(basePrice * styleFactor * 100) / 100) : null;
+
+  const intro = `我是${store.sellerAgentName}（客服 Agent）。`;
+  const productLine = product
+    ? `你问的是「${product.name}」。标价 ${product.priceUSDC} USDC。`
+    : "你想咨询哪个商品？你可以把 productId 一起发给我，我会给出更准确的报价/交付信息。";
+
+  const leadTimeLine = product && asksLeadTime ? `交付/发货：${product.leadTime}。` : "";
+
+  let priceLine = "";
+  if (product && (asksPrice || wantsDiscount)) {
+    if (wantsDiscount && suggestedPrice !== null) {
+      priceLine = `给你一个限时价：${suggestedPrice.toFixed(2).replace(/\\.00$/, "")} USDC（${store.sellerStyle} 策略）。`;
+    } else {
+      priceLine = `当前价格：${product.priceUSDC} USDC。`;
+    }
+  }
+
+  const nextStep = product
+    ? "如果你接受报价，我可以进入下单环节：你准备好 buyer 地址后就可以 prepare_deal -> settle_deal。"
+    : "";
+
+  const reply = [intro, productLine, priceLine, leadTimeLine, nextStep].filter(Boolean).join("\n");
+
+  return {
+    reply,
+    suggestedPriceUSDC: suggestedPrice !== null ? suggestedPrice.toFixed(2).replace(/\\.00$/, "") : null,
+  };
+}
+
 export async function POST(req: Request) {
   const auth = requireAuthIfEnabled(req);
   if (!auth.ok) return Response.json({ ok: false, error: auth.error }, { status: 401 });
@@ -272,6 +352,7 @@ export async function POST(req: Request) {
   const parsed = BodySchema.safeParse(raw);
   if (!parsed.success) return Response.json({ ok: false, error: "Invalid body" }, { status: 400 });
 
+  const origin = new URL(req.url).origin;
   const name = parsed.data.name;
   const args = parsed.data.args ?? {};
 
@@ -302,6 +383,8 @@ export async function POST(req: Request) {
             responseMins: store.responseMins,
             categories: store.categories,
             sellerAgentName: store.sellerAgentName,
+            sellerAgentId: store.sellerAgentId,
+            sellerAgent: sellerAgentMeta(store, origin),
             hasDemoReady: store.products.some((p) => p.demoReady),
           })),
         },
@@ -330,6 +413,13 @@ export async function POST(req: Request) {
         ok: true,
         result: {
           storeId: store.id,
+          store: {
+            id: store.id,
+            name: store.name,
+            sellerAgentName: store.sellerAgentName,
+            sellerAgentId: store.sellerAgentId,
+            sellerAgent: sellerAgentMeta(store, origin),
+          },
           products: scored.slice(0, limit).map(({ product }) => ({
             id: product.id,
             name: product.name,
@@ -395,6 +485,9 @@ export async function POST(req: Request) {
               id: store.id,
               name: store.name,
               verified: store.verified,
+              sellerAgentName: store.sellerAgentName,
+              sellerAgentId: store.sellerAgentId,
+              sellerAgent: sellerAgentMeta(store, origin),
             },
           })),
         },
@@ -419,6 +512,8 @@ export async function POST(req: Request) {
           responseMins: store.responseMins,
           categories: store.categories,
           sellerAgentName: store.sellerAgentName,
+          sellerAgentId: store.sellerAgentId,
+          sellerAgent: sellerAgentMeta(store, origin),
           sellerStyle: store.sellerStyle,
           productCount: store.products.length,
           products: store.products.map((p) => ({
@@ -462,6 +557,8 @@ export async function POST(req: Request) {
             name: store.name,
             verified: store.verified,
             sellerAgentName: store.sellerAgentName,
+            sellerAgentId: store.sellerAgentId,
+            sellerAgent: sellerAgentMeta(store, origin),
           },
         },
       });
@@ -493,6 +590,33 @@ export async function POST(req: Request) {
         result: {
           total: categories.length,
           categories,
+        },
+      });
+    }
+
+    if (name === "seller_agent_chat") {
+      const storeId = typeof args.storeId === "string" ? args.storeId : "";
+      const message = typeof args.message === "string" ? args.message : "";
+      const productId = typeof args.productId === "string" ? args.productId : "";
+      const conversationId = typeof args.conversationId === "string" ? args.conversationId : crypto.randomUUID();
+
+      if (!storeId) throw new Error("Missing storeId");
+      if (!message) throw new Error("Missing message");
+
+      const store = STORES.find((s) => s.id === storeId);
+      if (!store) throw new Error("Store not found");
+
+      const product = productId ? store.products.find((p) => p.id === productId) : undefined;
+      const built = buildSellerAgentReply({ store, product, message });
+
+      return Response.json({
+        ok: true,
+        result: {
+          conversationId,
+          sellerAgent: sellerAgentMeta(store, origin),
+          storeId: store.id,
+          productId: product?.id ?? null,
+          ...built,
         },
       });
     }

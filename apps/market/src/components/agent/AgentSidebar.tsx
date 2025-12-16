@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { clsx } from "clsx";
 import { useAgent } from "@/lib/agentContext";
 import { AgentStatusBadge } from "./AgentStatusBadge";
@@ -9,18 +9,66 @@ import { AgentChatView } from "./AgentChatView";
 
 type SidebarTab = "timeline" | "chat";
 
+const MIN_WIDTH = 320;
+const MAX_WIDTH = 600;
+const DEFAULT_WIDTH = 400;
+
 export function AgentSidebar() {
+  const [watchSessionId, setWatchSessionId] = useState("");
   const [activeTab, setActiveTab] = useState<SidebarTab>("timeline");
+  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const isDraggingRef = useRef(false);
+  const sidebarRef = useRef<HTMLElement>(null);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const newWidth = window.innerWidth - e.clientX;
+      setWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth)));
+    };
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
   const {
     connectionStatus,
     isExpanded,
     toggleSidebar,
+    connect,
     deal,
     errorMessage,
     reset,
     messages,
     demoMode,
     setDemoMode,
+    checkoutMode,
+    setCheckoutMode,
+    agentEngine,
+    setAgentEngine,
+    agentUpstream,
+    setAgentUpstream,
+    scenario,
+    setScenario,
+    awaitingConfirm,
+    confirmSettlement,
+    watchSession,
   } = useAgent();
 
   const isDisconnected = connectionStatus === "disconnected";
@@ -41,11 +89,19 @@ export function AgentSidebar() {
 
       {/* Sidebar */}
       <aside
+        ref={sidebarRef}
+        style={{ width: `${width}px` }}
         className={clsx(
-          "fixed right-0 top-0 z-50 flex h-full w-80 flex-col border-l border-white/10 bg-[#0a0c14]/95 backdrop-blur-xl transition-transform duration-300",
+          "fixed right-0 top-0 z-50 flex h-full flex-col border-l border-white/10 bg-[#0a0c14]/95 backdrop-blur-xl transition-transform duration-300",
           isExpanded ? "translate-x-0" : "translate-x-full"
         )}
       >
+        {/* Resize handle */}
+        <div
+          onMouseDown={handleMouseDown}
+          className="absolute left-0 top-0 h-full w-1 cursor-ew-resize hover:bg-indigo-500/50 active:bg-indigo-500/70 transition-colors"
+        />
+
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div className="flex items-center gap-3">
@@ -62,37 +118,169 @@ export function AgentSidebar() {
           </button>
         </div>
 
-        {/* Mode Toggle */}
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 bg-white/5">
-          <span className="text-xs text-white/50">运行模式</span>
-          <div className="flex rounded-lg bg-black/30 p-0.5">
-            <button
-              onClick={() => setDemoMode("simulate")}
-              disabled={!isDisconnected}
-              className={clsx(
-                "px-3 py-1 text-xs rounded-md transition-all",
-                demoMode === "simulate"
-                  ? "bg-amber-500/20 text-amber-400"
-                  : "text-white/40 hover:text-white/60",
-                !isDisconnected && "opacity-50 cursor-not-allowed"
-              )}
-            >
-              模拟
-            </button>
-            <button
-              onClick={() => setDemoMode("testnet")}
-              disabled={!isDisconnected}
-              className={clsx(
-                "px-3 py-1 text-xs rounded-md transition-all",
-                demoMode === "testnet"
-                  ? "bg-emerald-500/20 text-emerald-400"
-                  : "text-white/40 hover:text-white/60",
-                !isDisconnected && "opacity-50 cursor-not-allowed"
-              )}
-            >
-              Testnet
-            </button>
+        {/* Settings */}
+        <div className="border-b border-white/10 bg-white/5 px-4 py-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-white/50">运行模式</span>
+            <div className="flex rounded-lg bg-black/30 p-0.5">
+              <button
+                onClick={() => setDemoMode("simulate")}
+                disabled={!isDisconnected}
+                className={clsx(
+                  "px-3 py-1 text-xs rounded-md transition-all",
+                  demoMode === "simulate"
+                    ? "bg-amber-500/20 text-amber-400"
+                    : "text-white/40 hover:text-white/60",
+                  !isDisconnected && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                模拟
+              </button>
+              <button
+                onClick={() => setDemoMode("testnet")}
+                disabled={!isDisconnected}
+                className={clsx(
+                  "px-3 py-1 text-xs rounded-md transition-all",
+                  demoMode === "testnet"
+                    ? "bg-emerald-500/20 text-emerald-400"
+                    : "text-white/40 hover:text-white/60",
+                  !isDisconnected && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                Testnet
+              </button>
+            </div>
           </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-white/50">结算模式</span>
+            <div className="flex rounded-lg bg-black/30 p-0.5">
+              <button
+                onClick={() => setCheckoutMode("auto")}
+                disabled={!isDisconnected}
+                className={clsx(
+                  "px-3 py-1 text-xs rounded-md transition-all",
+                  checkoutMode === "auto"
+                    ? "bg-indigo-500/20 text-indigo-300"
+                    : "text-white/40 hover:text-white/60",
+                  !isDisconnected && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                全自动
+              </button>
+              <button
+                onClick={() => setCheckoutMode("confirm")}
+                disabled={!isDisconnected}
+                className={clsx(
+                  "px-3 py-1 text-xs rounded-md transition-all",
+                  checkoutMode === "confirm"
+                    ? "bg-sky-500/20 text-sky-300"
+                    : "text-white/40 hover:text-white/60",
+                  !isDisconnected && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                手动确认
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-white/50">对话场景</span>
+            <div className="flex rounded-lg bg-black/30 p-0.5">
+              <button
+                onClick={() => setScenario("single")}
+                disabled={!isDisconnected}
+                className={clsx(
+                  "px-3 py-1 text-xs rounded-md transition-all",
+                  scenario === "single"
+                    ? "bg-white/10 text-white/80"
+                    : "text-white/40 hover:text-white/60",
+                  !isDisconnected && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                单卖家
+              </button>
+              <button
+                onClick={() => setScenario("multi")}
+                disabled={!isDisconnected}
+                className={clsx(
+                  "px-3 py-1 text-xs rounded-md transition-all",
+                  scenario === "multi"
+                    ? "bg-emerald-500/20 text-emerald-300"
+                    : "text-white/40 hover:text-white/60",
+                  !isDisconnected && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                多卖家
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-white/50">Agent 引擎</span>
+            <div className="flex rounded-lg bg-black/30 p-0.5">
+              <button
+                onClick={() => setAgentEngine("builtin")}
+                disabled={!isDisconnected}
+                className={clsx(
+                  "px-3 py-1 text-xs rounded-md transition-all",
+                  agentEngine === "builtin"
+                    ? "bg-white/10 text-white/80"
+                    : "text-white/40 hover:text-white/60",
+                  !isDisconnected && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                内置
+              </button>
+              <button
+                onClick={() => setAgentEngine("proxy")}
+                disabled={!isDisconnected}
+                className={clsx(
+                  "px-3 py-1 text-xs rounded-md transition-all",
+                  agentEngine === "proxy"
+                    ? "bg-amber-500/20 text-amber-300"
+                    : "text-white/40 hover:text-white/60",
+                  !isDisconnected && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                外部
+              </button>
+            </div>
+          </div>
+
+          {isDisconnected && agentEngine === "proxy" && (
+            <div className="space-y-1">
+              <div className="text-xs text-white/50">Agent API Endpoint</div>
+              <input
+                value={agentUpstream}
+                onChange={(e) => setAgentUpstream(e.target.value)}
+                placeholder="http://localhost:8080/api/agent/stream"
+                className="w-full rounded-lg bg-black/30 border border-white/10 px-3 py-2 text-xs text-white/80 outline-none focus:ring-2 focus:ring-indigo-500/40"
+              />
+              <div className="text-[11px] text-white/35">使用同源 proxy，无需额外 CORS 配置</div>
+            </div>
+          )}
+
+          {isDisconnected && agentEngine === "proxy" && (
+            <div className="space-y-1">
+              <div className="text-xs text-white/50">Session ID（终端启动后粘贴）</div>
+              <div className="flex gap-2">
+                <input
+                  value={watchSessionId}
+                  onChange={(e) => setWatchSessionId(e.target.value)}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  className="min-w-0 flex-1 rounded-lg bg-black/30 border border-white/10 px-3 py-2 text-xs text-white/80 outline-none focus:ring-2 focus:ring-indigo-500/40"
+                />
+                <button
+                  onClick={() => watchSession(watchSessionId)}
+                  className="shrink-0 rounded-lg bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/15"
+                >
+                  观看
+                </button>
+              </div>
+              <div className="text-[11px] text-white/35">会订阅该 Session 的总聊天室 + 时间线</div>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -151,7 +339,7 @@ export function AgentSidebar() {
               <div>
                 <p className="text-sm text-white/60">Agent 未启动</p>
                 <p className="mt-1 text-xs text-white/40">
-                  点击「启动 Agent」开始自动购物流程
+                  先配置上方选项，然后点击下方按钮启动
                 </p>
               </div>
             </div>
@@ -208,24 +396,48 @@ export function AgentSidebar() {
         </div>
 
         {/* Footer */}
-        {!isDisconnected && (
-          <div className="border-t border-white/10 px-4 py-3">
+        <div className="border-t border-white/10 px-4 py-3">
+          {isDisconnected ? (
             <button
-              onClick={reset}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-sm text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+              onClick={() => connect()}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600/80 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-600"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span>重置</span>
+              <span>启动 Agent</span>
             </button>
-          </div>
-        )}
+          ) : (
+            <>
+              {awaitingConfirm && (
+                <button
+                  onClick={confirmSettlement}
+                  className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600/80 px-4 py-2 text-sm text-white transition-colors hover:bg-indigo-600"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>发起结算</span>
+                </button>
+              )}
+              <button
+                onClick={reset}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-sm text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                <span>重置</span>
+              </button>
+            </>
+          )}
+        </div>
       </aside>
     </>
   );

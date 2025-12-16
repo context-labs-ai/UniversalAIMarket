@@ -20,6 +20,7 @@ export interface Store {
   id: string;
   name: string;
   tagline: string;
+  sellerAgentId: string;
   sellerAgentName: string;
   sellerStyle: "friendly" | "strict" | "pro";
   categories: string[];
@@ -34,6 +35,7 @@ export interface Store {
 export const STORES: Store[] = [
   {
     id: "polyguns-armory",
+    sellerAgentId: "seller-polyguns-armory",
     name: "Polyguns 军械库",
     tagline: "游戏级武器，Polygon 托管，付款后自动交付。",
     sellerAgentName: "军械库 Agent",
@@ -88,6 +90,7 @@ export const STORES: Store[] = [
   },
   {
     id: "crosschain-coffee",
+    sellerAgentId: "seller-crosschain-coffee",
     name: "跨链咖啡馆",
     tagline: "实物链下发货，链上收据可验真。",
     sellerAgentName: "咖啡师 Agent",
@@ -143,6 +146,7 @@ export const STORES: Store[] = [
   },
   {
     id: "agent-devtools",
+    sellerAgentId: "seller-agent-devtools",
     name: "Agent 开发者商店",
     tagline: "卖的是能力：插件、API 配额、自动化脚本（交付为许可 NFT）。",
     sellerAgentName: "DevTools Agent",
@@ -184,6 +188,7 @@ export const STORES: Store[] = [
   },
   {
     id: "ai-gallery",
+    sellerAgentId: "seller-ai-gallery",
     name: "AI 艺术画廊",
     tagline: "数字作品上链交付，跨链结算更丝滑。",
     sellerAgentName: "策展人 Agent",
@@ -224,4 +229,3 @@ export const STORES: Store[] = [
     ],
   },
 ];
-

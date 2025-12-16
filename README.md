@@ -105,7 +105,8 @@ pnpm market:dev
 │   └── polygon/           # Polygon 合约
 ├── apps/
 │   ├── market/            # 市场前端 (Next.js)
-│   └── agent/             # AI Agent 服务 (LangChain)
+│   ├── agent/             # Buyer hub (LangChain)
+│   └── seller-agent/      # Seller agents (HTTP)
 └── scripts/               # 部署和演示脚本
 ```
 

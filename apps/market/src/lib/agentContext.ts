@@ -82,6 +82,15 @@ export interface DiscoveryDocument {
 // === Demo Mode ===
 export type DemoMode = "simulate" | "testnet";
 
+// === Checkout Mode ===
+export type CheckoutMode = "auto" | "confirm";
+
+// === Agent Engine ===
+export type AgentEngine = "builtin" | "proxy";
+
+// === Scenario ===
+export type AgentScenario = "single" | "multi";
+
 // === Agent State ===
 export interface AgentState {
   // Connection
@@ -98,10 +107,18 @@ export interface AgentState {
 
   // Demo mode
   demoMode: DemoMode;
+  checkoutMode: CheckoutMode;
+
+  // Agent runtime config
+  agentEngine: AgentEngine;
+  agentUpstream: string;
+  scenario: AgentScenario;
 
   // Runtime state
   selectedStoreId: string | null;
   selectedProductId: string | null;
+  awaitingConfirm: boolean;
+  settling: boolean;
 
   // Timeline
   timeline: TimelineStep[];
@@ -119,11 +136,17 @@ export interface AgentState {
 // === Agent Actions ===
 export interface AgentActions {
   connect: (goal?: string) => Promise<void>;
+  watchSession: (sessionId: string) => Promise<void>;
   disconnect: () => void;
   toggleSidebar: () => void;
   toggleChat: () => void;
   reset: () => void;
   setDemoMode: (mode: DemoMode) => void;
+  setCheckoutMode: (mode: CheckoutMode) => void;
+  setAgentEngine: (engine: AgentEngine) => void;
+  setAgentUpstream: (upstream: string) => void;
+  setScenario: (scenario: AgentScenario) => void;
+  confirmSettlement: () => Promise<void>;
 }
 
 // === Combined Context Type ===
