@@ -172,8 +172,8 @@ contract UniversalMarket is Revertable {
     /// @notice Trigger NFT release on Polygon via cross-chain call
     /// @param deal Deal information
     function _triggerNFTShipment(Deal memory deal) internal {
-        // Gas limit for the cross-chain call
-        uint256 callGasLimit = 400000;
+        // Gas limit for the cross-chain call (200k is enough for NFT release)
+        uint256 callGasLimit = 200000;
 
         // Get gas fee for Polygon call with MATCHING gas limit
         // IMPORTANT: Must use withdrawGasFeeWithGasLimit to match what gateway.call() uses internally
