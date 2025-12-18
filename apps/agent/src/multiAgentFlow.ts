@@ -686,7 +686,7 @@ export async function runMultiAgentFlow({
           : thread.lastQuoteUSDC;
         acceptedPrice = agreedPrice;
 
-        // Emit buyer acceptance message
+        // Emit buyer acceptance message (price will be confirmed by prepare_deal later)
         thread.transcript.push({ speaker: "buyer", content: buyerResponse.message });
         emitter.message({
           id: randomUUID(),
@@ -703,24 +703,7 @@ export async function runMultiAgentFlow({
           priceUSDC: priceString(agreedPrice),
         });
 
-        // Emit seller confirmation
-        const confirmText = `太好了，感谢您的信任！${priceString(agreedPrice)} USDC 成交确认，马上为您处理订单。\n报价: ${priceString(agreedPrice)} USDC`;
-        thread.transcript.push({ speaker: "seller", content: confirmText });
-        emitter.message({
-          id: randomUUID(),
-          role: "seller",
-          stage: "negotiate",
-          speaker: `${sellerName}${sellerAddr}`,
-          content: confirmText,
-          ts: now(),
-          sellerId: thread.store.sellerAgentId || thread.store.id,
-          storeId: thread.store.id,
-          storeName: thread.store.name || thread.store.id,
-          productId: thread.product.id,
-          productName: thread.product.name,
-          priceUSDC: priceString(agreedPrice),
-        });
-
+        // Note: Seller confirmation will be emitted AFTER prepare_deal confirms the final price
         break negotiationLoop;
       }
 
@@ -944,6 +927,24 @@ export async function runMultiAgentFlow({
       productName: winner.product.name,
       priceUSDC: priceString(winnerPrice),
     });
+  } else if (dealAccepted) {
+    // Buyer explicitly accepted - emit seller confirmation with confirmed price from prepare_deal
+    const confirmText = `太好了，感谢您的信任！${priceString(winnerPrice)} USDC 成交确认，马上为您处理订单。\n报价: ${priceString(winnerPrice)} USDC`;
+    winner.transcript.push({ speaker: "seller", content: confirmText });
+    emitter.message({
+      id: randomUUID(),
+      role: "seller",
+      stage: "negotiate",
+      speaker: `${winnerSellerName}${winnerSellerAddr}`,
+      content: confirmText,
+      ts: now(),
+      sellerId: winner.store.sellerAgentId || winner.store.id,
+      storeId: winner.store.id,
+      storeName: winner.store.name || winner.store.id,
+      productId: winner.product.id,
+      productName: winner.product.name,
+      priceUSDC: priceString(winnerPrice),
+    });
   }
 
   emitter.timelineStep({
@@ -965,6 +966,23 @@ export async function runMultiAgentFlow({
     priceUSDC: priceString(winnerPrice),
     status: "pending",
   });
+
+  // Emit cancelled status for all non-winning threads (including over-budget ones)
+  for (const thread of threads) {
+    if (thread === winner) continue; // Skip the winner
+    const lastPrice = thread.lastQuoteUSDC ?? (parsePriceUSDC(thread.product.priceUSDC) ?? 0);
+    const isOverBudget = lastPrice > budget;
+    emitter.dealProposal({
+      id: `${thread.store.id}-${thread.product.id}`,
+      storeId: thread.store.id,
+      storeName: thread.store.name || thread.store.id,
+      productId: thread.product.id,
+      productName: thread.product.name,
+      priceUSDC: priceString(lastPrice),
+      status: "cancelled",
+      reason: isOverBudget ? "over_budget" : "not_selected",
+    });
+  }
 
   emitter.state({ selectedStoreId: winner.store.id, selectedProductId: winner.product.id });
 

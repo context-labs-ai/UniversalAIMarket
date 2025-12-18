@@ -107,11 +107,13 @@ export function AgentProvider({ children }: AgentProviderProps) {
       );
 
       if (existingChatIndex >= 0) {
-        // Update existing chat
+        // Update existing chat - also update price if provided
         const updatedChats = [...s.sellerChats];
         updatedChats[existingChatIndex] = {
           ...updatedChats[existingChatIndex],
           messages: [...updatedChats[existingChatIndex].messages, message],
+          // Update price with the latest price from message
+          priceUSDC: sellerInfo.priceUSDC || updatedChats[existingChatIndex].priceUSDC,
         };
         return { ...s, sellerChats: updatedChats };
       } else {
@@ -137,12 +139,13 @@ export function AgentProvider({ children }: AgentProviderProps) {
     storeId: string,
     productId: string,
     status: "negotiating" | "agreed" | "settled" | "failed" | "cancelled",
-    deal?: SerializedDeal
+    deal?: SerializedDeal,
+    priceUSDC?: string
   ) => {
     setState((s) => {
       const updatedChats = s.sellerChats.map((c) =>
         c.storeId === storeId && c.productId === productId
-          ? { ...c, status, deal }
+          ? { ...c, status, deal, ...(priceUSDC ? { priceUSDC } : {}) }
           : c
       );
       return { ...s, sellerChats: updatedChats };
@@ -277,12 +280,13 @@ export function AgentProvider({ children }: AgentProviderProps) {
             chatStatus = "cancelled";
           }
 
-          // Update seller chat status
+          // Update seller chat status with final price
           updateSellerChatStatus(
             proposal.storeId,
             proposal.productId,
             chatStatus,
-            proposal.deal
+            proposal.deal,
+            proposal.priceUSDC
           );
 
           // Add to deal items list
@@ -474,7 +478,8 @@ export function AgentProvider({ children }: AgentProviderProps) {
             proposal.storeId,
             proposal.productId,
             chatStatus,
-            proposal.deal
+            proposal.deal,
+            proposal.priceUSDC
           );
 
           addDealItem({

@@ -37,6 +37,33 @@
 
 NFT 由智能合约托管，只有在收到跨链消息后才会释放。卖家和买家都不需要信任对方——代码即法律。
 
+### 4. 多 Agent 协作架构
+
+系统由多个 AI Agent 协同工作：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Agent Hub (协调中心)                     │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+         ┌──────────────────────┼──────────────────────┐
+         │                      │                      │
+         ▼                      │                      ▼
+┌─────────────────┐             │             ┌─────────────────┐
+│  Buyer Agent    │◄────────────┼────────────►│  Seller Agents  │
+│  (买家代理)      │  砍价循环    │             │  (卖家客服)      │
+│  - 预算控制      │             │             │  - 多种风格      │
+│  - 砍价策略      │             │             │  - 价格报价      │
+│  - 交易签名      │             │             │  - 成交确认      │
+└─────────────────┘             │             └─────────────────┘
+                                │
+                        ┌───────┴───────┐
+                        │   成交 & 结算   │
+                        └───────────────┘
+```
+
+详细架构说明见 [Agent Hub 文档](./apps/agent/README.md)。
+
 ---
 
 ## 技术架构详解
@@ -180,23 +207,42 @@ npx hardhat run scripts/deploy/deploy_escrow.ts --network sepolia
 
 #### 3. 存入 NFT 到 Escrow
 
-```javascript
-// 授权 Escrow 合约
-await nft.approve(escrowAddress, tokenId);
+卖家需要将 NFT 存入 Escrow 合约，这样买家付款后，智能合约才能自动将 NFT 释放给买家。
 
-// 存入 NFT
-await escrow.deposit(nftAddress, tokenId);
+**Demo 环境一键部署**（推荐）：
+
+```bash
+# 自动部署 NFT + Escrow 并存入示例 NFT
+npx hardhat run scripts/deploy/setup_demo.ts --network polygon_amoy
 ```
 
-#### 4. 配置 UniversalMarket
+**手动操作**（自定义 NFT）：
 
-在 ZetaChain 上的 UniversalMarket 需要知道：
-- 你的 Escrow 合约地址
-- NFT 合约地址
-- Token ID
-- 你的收款地址（Base 链）
+```bash
+# 使用 Hardhat console 或编写脚本
+npx hardhat console --network polygon_amoy
 
-这些信息会在 Deal 结构中传递。
+# 在 console 中：
+> const nft = await ethers.getContractAt("IERC721", "你的NFT合约地址")
+> const escrow = await ethers.getContractAt("UniversalEscrow", "Escrow合约地址")
+> await nft.approve(escrow.target, tokenId)
+> await escrow.deposit(nft.target, tokenId)
+```
+
+#### 4. Deal 信息传递
+
+无需在 UniversalMarket 上预先注册 Escrow。所有交易信息都在 Deal 结构中动态传递：
+
+| 字段 | 说明 |
+|------|------|
+| `buyer` | 买家地址（用于接收 Polygon 上的 NFT） |
+| `sellerBase` | 卖家 Base 链地址（用于收款） |
+| `polygonEscrow` | NFT 所在的 Escrow 合约地址 |
+| `nft` | NFT 合约地址 |
+| `tokenId` | NFT Token ID |
+| `price` | 成交价格（USDC，6 位小数） |
+
+这种设计让任何卖家都可以接入，无需中心化审批。
 
 ### Escrow 合约特性
 
@@ -282,10 +328,18 @@ cd apps/buyer-agent && pnpm dev     # 终端 5
 
 打开 http://localhost:3001 访问市场前端
 
+### 体验流程
+
+1. **浏览商品**：在市场中查看可购买的 NFT
+2. **发起购买**：点击商品，告诉 AI Agent 你的购买意向，如："帮我买这把武器，预算 1 USDC"
+3. **自动砍价**：观看 Buyer Agent 与 Seller Agent 实时砍价对话
+4. **确认交易**：砍价成功后，确认跨链结算
+5. **完成交付**：查看跨链交易进度，NFT 自动交付到你的钱包
+
 ### 模式说明
 
-- **模拟模式**：无需真实资金，快速展示完整流程
-- **Testnet 模式**：使用真实测试网进行跨链交易
+- **模拟模式**：无需真实资金，快速展示完整流程（默认）
+- **Testnet 模式**：使用真实测试网进行跨链交易，需要在 `.env` 中配置私钥和测试币
 
 ---
 
