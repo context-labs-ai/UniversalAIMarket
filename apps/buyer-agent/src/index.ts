@@ -118,9 +118,12 @@ app.post("/negotiate", async (req: Request, res: Response<NegotiateResponse | Er
     const body = req.body as NegotiateRequest;
     const { sessionId, round, stage, product, seller, currentQuote, sellerMessage, expectedAction } = body;
 
-    // 获取或创建会话上下文
-    if (!sessions.has(sessionId)) {
-      sessions.set(sessionId, {
+    // Create a unique session key combining sessionId + seller to handle multi-seller negotiations
+    const sessionKey = `${sessionId}:${seller.id}`;
+
+    // 获取或创建会话上下文（每个卖家独立的 session）
+    if (!sessions.has(sessionKey)) {
+      sessions.set(sessionKey, {
         transcript: [],
         productName: product.name,
         listPriceUSDC: parseFloat(product.listPriceUSDC),
@@ -129,8 +132,9 @@ app.post("/negotiate", async (req: Request, res: Response<NegotiateResponse | Er
       });
     }
 
-    const session = sessions.get(sessionId)!;
-    const listPrice = session.listPriceUSDC || parseFloat(product.listPriceUSDC);
+    const session = sessions.get(sessionKey)!;
+    // Always use the passed-in product price to avoid confusion in multi-seller scenarios
+    const listPrice = parseFloat(product.listPriceUSDC);
     const sellerQuote = currentQuote ? parseFloat(currentQuote.sellerPriceUSDC) : undefined;
 
     // 如果有卖家消息，加入 transcript
@@ -184,7 +188,11 @@ app.post("/negotiate", async (req: Request, res: Response<NegotiateResponse | Er
             decision = { accept: false, reason: budgetCheck.reason };
           } else {
             message = await strategy.generateAcceptance(ctx, sellerQuote);
-            decision = { accept: true, reason: shouldAcceptResult.reason };
+            decision = {
+              accept: true,
+              acceptedPrice: sellerQuote.toFixed(2),
+              reason: shouldAcceptResult.reason
+            };
           }
         } else {
           // 继续砍价
@@ -204,7 +212,7 @@ app.post("/negotiate", async (req: Request, res: Response<NegotiateResponse | Er
           throw new Error("Missing sellerQuote for accept stage");
         }
         message = await strategy.generateAcceptance(ctx, sellerQuote);
-        decision = { accept: true };
+        decision = { accept: true, acceptedPrice: sellerQuote.toFixed(2) };
         break;
       }
 

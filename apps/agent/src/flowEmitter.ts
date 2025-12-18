@@ -32,7 +32,8 @@ export type DealProposalPayload = {
   productId: string;
   productName: string;
   priceUSDC: string;
-  status: "pending" | "failed";
+  status: "pending" | "failed" | "cancelled";
+  reason?: string; // e.g., "over_budget", "negotiation_failed"
 };
 
 export type ToolCallPayload = {
@@ -49,12 +50,20 @@ export type ToolResultPayload = {
   ts: number;
 };
 
+export type SettlementCompletePayload = {
+  storeId: string;
+  productId: string;
+  dealId?: string;
+  txHash?: string;
+};
+
 export interface FlowEmitter {
   comment(comment: string): void;
   state(patch: Record<string, unknown>): void;
   timelineStep(step: TimelineStepPayload): void;
   message(msg: ChatMessagePayload): void;
   dealProposal(proposal: DealProposalPayload): void;
+  settlementComplete(payload: SettlementCompletePayload): void;
   toolCall(call: ToolCallPayload): void;
   toolResult(result: ToolResultPayload): void;
   done(payload: unknown): void;

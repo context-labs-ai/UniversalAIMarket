@@ -1,6 +1,22 @@
 import { ethers } from "hardhat";
 import type { MockWeaponNFT, UniversalEscrow } from "../../typechain-types";
 
+/**
+ * Setup Demo Environment
+ *
+ * This script deploys all contracts needed for the demo and prepares NFTs:
+ * 1. Deploy MockWeaponNFT (example NFT contract)
+ * 2. Deploy UniversalEscrow (chain-agnostic escrow)
+ * 3. Mint demo NFTs to seller
+ * 4. Deposit NFTs into escrow
+ *
+ * Usage:
+ *   npx hardhat run scripts/deploy/setup_demo.ts --network polygon_amoy
+ *
+ * Required env vars:
+ *   - POLYGON_GATEWAY_ADDRESS: ZetaChain Gateway address on target chain
+ *   - SELLER_PRIVATE_KEY: Seller's private key (for minting/depositing)
+ */
 async function main() {
   const signers = await ethers.getSigners();
   const deployer = signers[0];
@@ -8,23 +24,25 @@ async function main() {
   // Seller is always the last signer in the array
   const seller = signers[signers.length - 1];
 
-  console.log("Deploying Polygon contracts...");
+  console.log("=== Setting up Demo Environment ===\n");
   console.log("Deployer:", deployer.address);
   console.log("Seller:", seller.address);
 
-  // Deploy MockWeaponNFT (demo NFT - can be replaced with any ERC-721)
+  // === Step 1: Deploy MockWeaponNFT ===
+  console.log("\n--- Deploying MockWeaponNFT ---");
   const MockWeaponNFT = await ethers.getContractFactory("MockWeaponNFT");
   const nft = (await MockWeaponNFT.deploy()) as unknown as MockWeaponNFT;
   await nft.waitForDeployment();
   const nftAddress = await nft.getAddress();
   console.log("MockWeaponNFT deployed to:", nftAddress);
 
-  // Deploy UniversalEscrow
-  // This same contract code works on ANY EVM chain - only the gateway address differs
+  // === Step 2: Deploy UniversalEscrow ===
+  console.log("\n--- Deploying UniversalEscrow ---");
   const gatewayAddress = process.env.POLYGON_GATEWAY_ADDRESS;
   if (!gatewayAddress) {
     throw new Error("POLYGON_GATEWAY_ADDRESS not set in environment");
   }
+  console.log("Using gateway:", gatewayAddress);
 
   const UniversalEscrow = await ethers.getContractFactory("UniversalEscrow");
   const escrow = (await UniversalEscrow.deploy(
@@ -34,8 +52,10 @@ async function main() {
   const escrowAddress = await escrow.getAddress();
   console.log("UniversalEscrow deployed to:", escrowAddress);
 
-  // Mint NFTs to seller and deposit to escrow (demo-ready tokenIds)
-  const tokenIds = [1, 7];
+  // === Step 3: Mint and deposit NFTs ===
+  console.log("\n--- Setting up Demo NFTs ---");
+  // TokenIds for demo products (matching catalog.ts)
+  const tokenIds = [2, 8]; // 量子之剑 and 咖啡豆收据
 
   const nftAsSeller = nft.connect(seller) as MockWeaponNFT;
   const escrowAsSeller = escrow.connect(seller) as UniversalEscrow;
@@ -57,10 +77,14 @@ async function main() {
     console.log(`NFT ${tokenId} owner is now: ${nftOwner}`);
   }
 
-  // Output addresses for .env
-  console.log("\n=== Add to .env ===");
+  // === Output Summary ===
+  console.log("\n=== Demo Setup Complete ===\n");
+  console.log("Add to .env:");
   console.log(`POLYGON_MOCK_NFT=${nftAddress}`);
   console.log(`POLYGON_ESCROW=${escrowAddress}`);
+  console.log("");
+  console.log("Demo NFTs ready:");
+  tokenIds.forEach((id) => console.log(`  - Token #${id} in escrow`));
 }
 
 main()

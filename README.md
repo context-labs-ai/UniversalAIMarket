@@ -259,16 +259,28 @@ cp .env.example .env
 # 编辑 .env 填入你的私钥和配置
 ```
 
-### 运行演示
+### 启动服务
+
+本项目采用多 Agent 架构，完整运行需要启动以下服务：
+
+| 服务 | 端口 | 目录 | 启动命令 | 说明 |
+|------|------|------|----------|------|
+| **Market Frontend** | 3001 | `apps/market` | `pnpm dev` | 市场前端 UI |
+| **Agent Hub** | 8080 | `apps/agent` | `pnpm dev` | Agent 协调中心，处理砍价流程 |
+| **Seller Agent A** | 8081 | `apps/seller-agent` | `pnpm dev:a` | 卖家 Agent（aggressive 风格） |
+| **Seller Agent B** | 8082 | `apps/seller-agent` | `pnpm dev:b` | 卖家 Agent（pro 风格） |
+| **Buyer Agent** | 8083 | `apps/buyer-agent` | `pnpm dev` | 买家 Agent（自托管服务） |
 
 ```bash
-# 启动所有服务
-pnpm agent:dev      # Agent Hub (8080)
-pnpm buyer:dev      # Buyer Agent (8083)
-pnpm market:dev     # 市场前端 (3001)
-
-# 打开 http://localhost:3001
+# 分别在不同终端启动
+cd apps/market && pnpm dev          # 终端 1
+cd apps/agent && pnpm dev           # 终端 2
+cd apps/seller-agent && pnpm dev:a  # 终端 3
+cd apps/seller-agent && pnpm dev:b  # 终端 4
+cd apps/buyer-agent && pnpm dev     # 终端 5
 ```
+
+打开 http://localhost:3001 访问市场前端
 
 ### 模式说明
 

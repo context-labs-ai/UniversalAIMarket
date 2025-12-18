@@ -15,20 +15,34 @@ scripts/
 
 ## 🚀 部署脚本 (deploy/)
 
-### deploy_polygon.ts
-**用途**: 部署 Polygon 链上的合约（MockWeaponNFT + WeaponEscrow）
+### setup_demo.ts
+**用途**: 一键设置演示环境（MockWeaponNFT + UniversalEscrow + mint + deposit）
 
 ```bash
-npx hardhat run scripts/deploy/deploy_polygon.ts --network polygonAmoy
+npx hardhat run scripts/deploy/setup_demo.ts --network polygon_amoy
 ```
 
 | 参数 | 说明 |
 |------|------|
 | 无需修改 | 自动从 .env 读取配置 |
 
-**运行时机**: 首次部署或需要重新部署 Polygon 合约时
+**运行时机**: 首次部署或需要重新部署演示环境时
 **运行次数**: 通常只需 1 次
 **输出**: 会打印合约地址，需要手动添加到 `.env`
+
+---
+
+### deploy_escrow.ts
+**用途**: 只部署 UniversalEscrow 合约（可用于任意 EVM 链）
+
+```bash
+npx hardhat run scripts/deploy/deploy_escrow.ts --network polygon_amoy
+npx hardhat run scripts/deploy/deploy_escrow.ts --network base_sepolia
+```
+
+**运行时机**: 卖家需要在新链上托管 NFT 时
+**运行次数**: 每条链部署 1 次
+**输出**: UniversalEscrow 合约地址
 
 ---
 
@@ -220,8 +234,8 @@ npx ts-node scripts/utils/encodeDeal.ts
 cp .env.example .env
 # 编辑 .env，填入私钥和地址
 
-# 2. 部署 Polygon 合约
-npx hardhat run scripts/deploy/deploy_polygon.ts --network polygonAmoy
+# 2. 部署演示环境（NFT + Escrow + mint + deposit）
+npx hardhat run scripts/deploy/setup_demo.ts --network polygon_amoy
 # 将输出的地址添加到 .env
 
 # 3. 部署 ZetaChain 合约

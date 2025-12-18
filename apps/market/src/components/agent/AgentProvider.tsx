@@ -24,8 +24,8 @@ interface AgentProviderProps {
   children: ReactNode;
 }
 
-const DEFAULT_UPSTREAM = (process.env.NEXT_PUBLIC_AGENT_UPSTREAM || "").trim();
-const DEFAULT_ENGINE: AgentEngine = DEFAULT_UPSTREAM ? "proxy" : "builtin";
+const DEFAULT_UPSTREAM = (process.env.NEXT_PUBLIC_AGENT_UPSTREAM || "http://localhost:8080/api/agent/stream").trim();
+const DEFAULT_ENGINE: AgentEngine = "proxy"; // Default to external agent for better demo experience
 const DEFAULT_SCENARIO: AgentScenario =
   (process.env.NEXT_PUBLIC_AGENT_SCENARIO || "").trim() === "multi" ? "multi" : "single";
 
@@ -136,7 +136,7 @@ export function AgentProvider({ children }: AgentProviderProps) {
   const updateSellerChatStatus = useCallback((
     storeId: string,
     productId: string,
-    status: "negotiating" | "agreed" | "failed",
+    status: "negotiating" | "agreed" | "settled" | "failed" | "cancelled",
     deal?: SerializedDeal
   ) => {
     setState((s) => {
@@ -264,15 +264,24 @@ export function AgentProvider({ children }: AgentProviderProps) {
             productId: string;
             productName: string;
             priceUSDC: string;
-            status: "pending" | "failed";
+            status: "pending" | "failed" | "cancelled";
+            reason?: string; // e.g., "over_budget", "negotiation_failed"
             deal?: SerializedDeal;
           };
+
+          // Map deal status to seller chat status
+          let chatStatus: "agreed" | "failed" | "cancelled" = "failed";
+          if (proposal.status === "pending") {
+            chatStatus = "agreed";
+          } else if (proposal.status === "cancelled" || proposal.reason === "over_budget") {
+            chatStatus = "cancelled";
+          }
 
           // Update seller chat status
           updateSellerChatStatus(
             proposal.storeId,
             proposal.productId,
-            proposal.status === "pending" ? "agreed" : "failed",
+            chatStatus,
             proposal.deal
           );
 
@@ -284,8 +293,9 @@ export function AgentProvider({ children }: AgentProviderProps) {
             productId: proposal.productId,
             productName: proposal.productName,
             priceUSDC: proposal.priceUSDC,
-            status: proposal.status,
+            status: proposal.status === "cancelled" ? "failed" : proposal.status,
             deal: proposal.deal,
+            error: proposal.reason === "over_budget" ? "价格超出预算" : undefined,
           });
           break;
         }
@@ -328,6 +338,29 @@ export function AgentProvider({ children }: AgentProviderProps) {
           break;
         }
 
+        case "settlement_complete": {
+          // Settlement completed for a deal
+          const settlement = data as {
+            storeId: string;
+            productId: string;
+            dealId?: string;
+            txHash?: string;
+          };
+
+          // Update seller chat status to settled
+          updateSellerChatStatus(
+            settlement.storeId,
+            settlement.productId,
+            "settled"
+          );
+
+          // Update deal item status to completed
+          if (settlement.dealId) {
+            updateDealItemStatus(settlement.dealId, "completed");
+          }
+          break;
+        }
+
         case "done": {
           setConnectionStatus("completed");
           break;
@@ -344,7 +377,7 @@ export function AgentProvider({ children }: AgentProviderProps) {
     } catch {
       // Ignore JSON parse errors
     }
-  }, [addMessage, addMessageToSellerChat, updateSellerChatStatus, addDealItem, setConnectionStatus, setError]);
+  }, [addMessage, addMessageToSellerChat, updateSellerChatStatus, addDealItem, updateDealItemStatus, setConnectionStatus, setError]);
 
   const handleAguiEvent = useCallback(
     (event: unknown) => {
@@ -390,30 +423,93 @@ export function AgentProvider({ children }: AgentProviderProps) {
 
       if (type === "CUSTOM") {
         const name = typeof evt.name === "string" ? evt.name : "";
-        if (name !== "universal_market.timeline_step") return;
-
         const valueRaw = evt.value;
         if (!valueRaw || typeof valueRaw !== "object") return;
-        const step = valueRaw as Record<string, unknown>;
-        const stepId = typeof step.id === "string" ? step.id : "";
-        if (!stepId) return;
+        const value = valueRaw as Record<string, unknown>;
 
-        const statusRaw = step.status;
-        const status: TimelineStatus | undefined =
-          statusRaw === "idle" || statusRaw === "running" || statusRaw === "done" || statusRaw === "error"
-            ? (statusRaw as TimelineStatus)
-            : undefined;
-        const detail = typeof step.detail === "string" ? step.detail : undefined;
-        const txHash = typeof step.txHash === "string" ? step.txHash : undefined;
+        if (name === "universal_market.timeline_step") {
+          const stepId = typeof value.id === "string" ? value.id : "";
+          if (!stepId) return;
 
-        setState((s) => ({
-          ...s,
-          timeline: updateTimelineStep(s.timeline, stepId, {
-            status,
-            detail,
-            txHash,
-          }),
-        }));
+          const statusRaw = value.status;
+          const status: TimelineStatus | undefined =
+            statusRaw === "idle" || statusRaw === "running" || statusRaw === "done" || statusRaw === "error"
+              ? (statusRaw as TimelineStatus)
+              : undefined;
+          const detail = typeof value.detail === "string" ? value.detail : undefined;
+          const txHash = typeof value.txHash === "string" ? value.txHash : undefined;
+
+          setState((s) => ({
+            ...s,
+            timeline: updateTimelineStep(s.timeline, stepId, {
+              status,
+              detail,
+              txHash,
+            }),
+          }));
+          return;
+        }
+
+        if (name === "universal_market.deal_proposal") {
+          const proposal = value as {
+            id: string;
+            storeId: string;
+            storeName: string;
+            productId: string;
+            productName: string;
+            priceUSDC: string;
+            status: "pending" | "failed" | "cancelled";
+            reason?: string;
+            deal?: SerializedDeal;
+          };
+
+          let chatStatus: "agreed" | "failed" | "cancelled" = "failed";
+          if (proposal.status === "pending") {
+            chatStatus = "agreed";
+          } else if (proposal.status === "cancelled" || proposal.reason === "over_budget") {
+            chatStatus = "cancelled";
+          }
+
+          updateSellerChatStatus(
+            proposal.storeId,
+            proposal.productId,
+            chatStatus,
+            proposal.deal
+          );
+
+          addDealItem({
+            id: proposal.id,
+            storeId: proposal.storeId,
+            storeName: proposal.storeName,
+            productId: proposal.productId,
+            productName: proposal.productName,
+            priceUSDC: proposal.priceUSDC,
+            status: proposal.status === "cancelled" ? "failed" : proposal.status,
+            deal: proposal.deal,
+            error: proposal.reason === "over_budget" ? "价格超出预算" : undefined,
+          });
+          return;
+        }
+
+        if (name === "universal_market.settlement_complete") {
+          const settlement = value as {
+            storeId: string;
+            productId: string;
+            dealId?: string;
+            txHash?: string;
+          };
+
+          updateSellerChatStatus(
+            settlement.storeId,
+            settlement.productId,
+            "settled"
+          );
+
+          if (settlement.dealId) {
+            updateDealItemStatus(settlement.dealId, "completed");
+          }
+          return;
+        }
         return;
       }
 
@@ -534,7 +630,7 @@ export function AgentProvider({ children }: AgentProviderProps) {
         setConnectionStatus("completed");
       }
     },
-    [addMessage, setConnectionStatus, setError]
+    [addMessage, addDealItem, setConnectionStatus, setError, updateDealItemStatus, updateSellerChatStatus]
   );
 
   const runSseStream = useCallback(

@@ -1,4 +1,4 @@
-import type { FlowEmitter, TimelineStepPayload, ChatMessagePayload, ToolCallPayload, ToolResultPayload, DealProposalPayload } from "./flowEmitter.js";
+import type { FlowEmitter, TimelineStepPayload, ChatMessagePayload, ToolCallPayload, ToolResultPayload, DealProposalPayload, SettlementCompletePayload } from "./flowEmitter.js";
 import { emitRunEvent, markRunDone } from "./runSessions.js";
 
 export class RunSessionEmitter implements FlowEmitter {
@@ -26,6 +26,10 @@ export class RunSessionEmitter implements FlowEmitter {
 
   dealProposal(proposal: DealProposalPayload) {
     emitRunEvent(this.sessionId, "deal_proposal", proposal);
+  }
+
+  settlementComplete(payload: SettlementCompletePayload) {
+    emitRunEvent(this.sessionId, "settlement_complete", payload);
   }
 
   toolCall(call: ToolCallPayload) {

@@ -1,7 +1,7 @@
 import { ethers } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
-import type { MockWeaponNFT, WeaponEscrow } from "../../typechain-types";
+import type { MockWeaponNFT, UniversalEscrow } from "../../typechain-types";
 
 interface LocalnetAddress {
   chain: string;
@@ -67,16 +67,16 @@ async function main() {
   const nftAddress = await nft.getAddress();
   console.log("MockWeaponNFT deployed to:", nftAddress);
 
-  // === Step 2: Deploy WeaponEscrow ===
-  console.log("\n--- Deploying WeaponEscrow ---");
-  const WeaponEscrow = await ethers.getContractFactory("WeaponEscrow");
+  // === Step 2: Deploy UniversalEscrow ===
+  console.log("\n--- Deploying UniversalEscrow ---");
+  const UniversalEscrow = await ethers.getContractFactory("UniversalEscrow");
   // In localnet, gatewayEVM is used for all EVM chains
-  const escrow = (await WeaponEscrow.deploy(
+  const escrow = (await UniversalEscrow.deploy(
     gatewayEVM
-  )) as unknown as WeaponEscrow;
+  )) as unknown as UniversalEscrow;
   await escrow.waitForDeployment();
   const escrowAddress = await escrow.getAddress();
-  console.log("WeaponEscrow deployed to:", escrowAddress);
+  console.log("UniversalEscrow deployed to:", escrowAddress);
 
   // === Step 3: Deploy UniversalMarket ===
   console.log("\n--- Deploying UniversalMarket ---");
@@ -92,7 +92,7 @@ async function main() {
   const tokenIds = [1, 7];
 
   const nftAsSeller = nft.connect(seller) as MockWeaponNFT;
-  const escrowAsSeller = escrow.connect(seller) as WeaponEscrow;
+  const escrowAsSeller = escrow.connect(seller) as UniversalEscrow;
 
   for (const tokenId of tokenIds) {
     const mintTx = await nft.mint(seller.address, tokenId);
@@ -199,8 +199,8 @@ async function main() {
   // === Output Summary ===
   console.log("\n=== Deployment Complete ===\n");
   console.log("Contract Addresses:");
-  console.log(`  POLYGON_MOCK_WEAPON_NFT=${nftAddress}`);
-  console.log(`  POLYGON_WEAPON_ESCROW=${escrowAddress}`);
+  console.log(`  POLYGON_MOCK_NFT=${nftAddress}`);
+  console.log(`  POLYGON_ESCROW=${escrowAddress}`);
   console.log(`  ZETA_UNIVERSAL_MARKET=${marketAddress}`);
 
   console.log("\nLocalnet Addresses (from localnet.json):");
@@ -212,8 +212,8 @@ async function main() {
   // Save deployed addresses to a file for demo script
   const deployedAddresses = {
     // Deployed contracts
-    POLYGON_MOCK_WEAPON_NFT: nftAddress,
-    POLYGON_WEAPON_ESCROW: escrowAddress,
+    POLYGON_MOCK_NFT: nftAddress,
+    POLYGON_ESCROW: escrowAddress,
     ZETA_UNIVERSAL_MARKET: marketAddress,
     // Localnet addresses
     BASE_GATEWAY_ADDRESS: gatewayEVM,

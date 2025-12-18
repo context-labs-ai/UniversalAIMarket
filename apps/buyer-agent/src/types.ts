@@ -51,9 +51,10 @@ export interface NegotiateResponse {
 
   // 如果 expectedAction=decide，返回决策
   decision?: {
-    accept: boolean;         // 是否接受当前报价
-    offerPriceUSDC?: string; // 如果不接受，给出新的出价
-    reason?: string;         // 决策原因（用于 debug）
+    accept: boolean;           // 是否接受当前报价
+    acceptedPrice?: string;    // 如果接受，明确指定接受的价格（数字字符串）
+    offerPriceUSDC?: string;   // 如果不接受，给出新的出价
+    reason?: string;           // 决策原因（用于 debug）
   };
 }
 

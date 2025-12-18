@@ -1,132 +1,197 @@
-# Universal AI Market - External Agent (LangChain)
+# Universal AI Market - Agent Hub
 
-`apps/agent` 是一个外部 Agent 服务示例：
+Agent Hub 是整个 AI 代购系统的**协调中心**，负责编排多个 AI Agent 之间的交互，实现自动化的商品发现、价格协商和跨链结算。
 
-- 对前端输出 SSE 事件流（聊天 / 工具调用 / 时间线）
-- 通过 HTTP 调用 `apps/market` 的 API 来完成“逛店 / 选品 / 生成 deal / 结算”等动作
+---
 
-## 这些 API 和 “AI Tool” 的关系是什么？
+## 系统架构
 
-这些都是 **market 后端提供的 HTTP API**。在 Agent 里，你可以把它们封装为 LLM Tools（或普通函数）。
-
-- `POST /api/auth/challenge`：鉴权流程第 1 步，返回要签名的 challenge（不是业务 tool）
-- `POST /api/auth/verify`：鉴权流程第 2 步，提交 address + signature 换 token（不是业务 tool）
-- `GET /api/agent/tool`：返回工具清单（tool schema）
-- `POST /api/agent/tool`：执行工具（body: `{ "name": "...", "args": { ... } }`）
-
-## 卖家客服 Agent（用于聊天/砍价）
-
-你的设想是对的：每个店铺都有一个“卖家客服 Agent”作为对话对象。现在 `apps/market` 已经支持：
-
-- `search_stores` 会返回 `sellerAgentId` 和 `sellerAgent`（包含 `id/name/address/chatEndpoint/chat`）
-- `search_products` 会在返回里带 `store.sellerAgent*`
-
-你可以用这些字段把“选店铺/选商品”和“发起聊天”连起来：
-
-1. 先 `search_stores`/`search_products` 拿到 `storeId`
-2. 再调用 `seller_agent_chat`：
-   - endpoint：`POST {WEB_BASE_URL}/api/agent/tool`
-   - body：`{ "name":"seller_agent_chat", "args": { "storeId":"...", "message":"...", "productId": "...?", "conversationId": "...?" } }`
-3. 返回：`conversationId`（用于续聊）、`reply`（卖家回复）、`suggestedPriceUSDC`（砍价建议，若有）
-
-说明：目前 `seller_agent_chat` 是 rule-based 的 MVP（为了 hackathon 稳定演示），后续你可以替换成真正的“第二个 LLM 卖家 Agent”并保持同样的 tool 形状。
-
-## Agent <-> Market 的时序（MVP）
-
-### A) 不开启鉴权（AGENT_AUTH_REQUIRED=0）
-
-1. Agent 发现能力：`GET /.well-known/universal-ai-market.json`
-2. 拉取工具列表：`GET /api/agent/tool`
-3. 执行工具：`POST /api/agent/tool`（search -> seller_agent_chat -> prepare_deal -> settle_deal）
-4. 订阅结算进度：`GET /api/settle/stream`（SSE）
-5. 前端订阅 Agent 事件流：`GET /api/agent/stream`（SSE，由本服务 `apps/agent` 提供）
-
-### B) 开启鉴权（AGENT_AUTH_REQUIRED=1）
-
-1. `POST /api/auth/challenge` -> 得到 challenge 文本 / nonce
-2. Agent 用钱包私钥签名 challenge
-3. `POST /api/auth/verify` -> 换取 Bearer token
-4. 后续 `POST /api/agent/tool` 需要带 `Authorization: Bearer <token>`
-
-## curl 示例（直接调用 market）
-
-假设 market 在 `http://localhost:3001`（Windows PowerShell 建议用 `curl.exe`，避免 `curl` 被当成 `Invoke-WebRequest` 别名）。
-
-```powershell
-# 0) 发现文档（告诉 Agent 该怎么对接）
-curl.exe http://localhost:3001/.well-known/universal-ai-market.json
-
-# 1) 查看 market 支持哪些工具
-curl.exe http://localhost:3001/api/agent/tool
-
-# 2) 执行工具：搜索店铺
-curl.exe -X POST http://localhost:3001/api/agent/tool `
-  -H "content-type: application/json" `
-  -d "{\"name\":\"search_stores\",\"args\":{\"query\":\"酷炫\",\"limit\":3}}"
-
-# 3) 执行工具：在店铺内搜索商品（storeId 用上一步返回的 id）
-curl.exe -X POST http://localhost:3001/api/agent/tool `
-  -H "content-type: application/json" `
-  -d "{\"name\":\"search_products\",\"args\":{\"storeId\":\"neo-garage\",\"query\":\"NFT\",\"limit\":5}}"
-
-# 4) 执行工具：准备 deal（注意：address 必须是合法 0x 地址）
-curl.exe -X POST http://localhost:3001/api/agent/tool `
-  -H "content-type: application/json" `
-  -d "{\"name\":\"prepare_deal\",\"args\":{\"buyer\":\"0x0000000000000000000000000000000000000001\",\"sellerBase\":\"0x0000000000000000000000000000000000000002\",\"polygonEscrow\":\"0x0000000000000000000000000000000000000003\",\"nft\":\"0x0000000000000000000000000000000000000004\",\"tokenId\":\"1\",\"priceUSDC\":\"9.99\",\"deadlineSecondsFromNow\":900}}"
-
-# 5) 订阅内置 Agent SSE（用于看事件流/调试）
-curl.exe -N -H "accept: text/event-stream" "http://localhost:3001/api/agent/stream?engine=builtin&mode=simulate&checkoutMode=auto"
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         前端 (apps/market)                       │
+│                      http://localhost:3001                       │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │ SSE 事件流
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Agent Hub (apps/agent)                        │
+│                      http://localhost:8080                       │
+│                                                                  │
+│  ┌─────────────────┐   ┌─────────────────┐   ┌────────────────┐ │
+│  │  Multi-Agent    │   │   工具调用       │   │   SSE 输出     │ │
+│  │    协调器       │   │   (Market API)   │   │   (前端订阅)   │ │
+│  └────────┬────────┘   └────────┬────────┘   └────────────────┘ │
+└───────────┼─────────────────────┼───────────────────────────────┘
+            │                     │
+    ┌───────┴───────┐             │
+    ▼               ▼             ▼
+┌─────────┐   ┌─────────┐   ┌──────────────┐
+│ Buyer   │   │ Seller  │   │   Market     │
+│ Agent   │   │ Agents  │   │   Backend    │
+│ :8083   │   │ :8081   │   │   :3001      │
+│         │   │ :8082   │   │              │
+└─────────┘   └─────────┘   └──────────────┘
 ```
 
-## 本服务（apps/agent）对外暴露的接口
+---
 
-- `GET /api/agent/stream`（SSE）：给前端（或其它观察者）订阅 Agent 过程事件流
-- `POST /api/agent/run`：从终端/脚本触发一次运行，返回 `sessionId`，随后用 `GET /api/agent/stream?sessionId=...` 订阅“总聊天室 + 时间线”
-- `POST /api/agent/action`：confirm 模式下用于继续（例如 `{ sessionId, action: "confirm_settlement" }`）
-- `POST /api/agui/run`（AG-UI）：返回 `text/event-stream`，`data:` 为 AG-UI 事件 JSON（可用 `@ag-ui/client` 的 `HttpAgent` 直连）
+## Agent 职责分工
 
-## 运行
+| Agent | 职责 | 关键能力 |
+|-------|------|----------|
+| **Agent Hub** | 协调中心 | 编排多 Agent 交互、管理会话状态、输出 SSE 事件流 |
+| **Buyer Agent** | 买家代理 | 砍价策略、预算控制、交易签名 |
+| **Seller Agent** | 卖家客服 | 价格报价、风格化对话、成交确认 |
 
-1. 复制 `apps/agent/.env.example` 到 `apps/agent/.env`
-   - 建议：`WEB_BASE_URL=http://localhost:3001`（apps/market）
-   - 如果 `apps/market` 设置了 `AGENT_AUTH_REQUIRED=1`，还需要设置：`AGENT_ID` + `AGENT_PRIVATE_KEY`（用于签名登录）
-2. 安装依赖：`pnpm -C apps/agent install`
-3. 启动：`pnpm -C apps/agent dev`
+---
 
-在前端（`apps/market`）里选择代理模式：
+## 多 Agent 协作流程
 
-- Agent 引擎：`API 代理`
-- API Endpoint：`http://localhost:8080/api/agent/stream`
+### 协作流程图
 
-## 多 Agent 真对话（buyer + 2 sellers）
-
-本服务支持一个“多 Agent 互聊”演示流：
-- 买家 Agent 在本服务（hub）里运行
-- 两个卖家客服 Agent 作为**独立服务**运行（只负责聊天 + 报价）
-
-### 1) 启动 2 个 Seller Agent 服务
-见：`apps/seller-agent/README.md`
-
-默认可用：
-- `http://localhost:8081/api/seller/chat`
-- `http://localhost:8082/api/seller/chat`
-
-在 `apps/agent/.env` 里配置：
-- `SELLER_AGENT_A_URL=http://localhost:8081/api/seller/chat`
-- `SELLER_AGENT_B_URL=http://localhost:8082/api/seller/chat`
-
-### 2) 终端触发运行 -> 网页观战（总聊天室）
-
-```powershell
-# 触发一次 session（返回 sessionId）
-pnpm agent:cli -- run --scenario multi --mode simulate --checkout confirm --goal "帮我买一个 100 USDC 内的酷炫商品"
-
-# 网页：打开 market（http://localhost:3001）
-# 右侧 Agent 控制台 -> Agent 引擎=外部 -> upstream=http://localhost:8080/api/agent/stream
-# Session ID 粘贴上一步输出 -> 点“观看”
+```
+                              ┌─────────────────┐
+                              │   Agent Hub     │
+                              │   (协调中心)     │
+                              └────────┬────────┘
+                                       │
+               ┌───────────────────────┼───────────────────────┐
+               │                       │                       │
+               ▼                       │                       ▼
+      ┌─────────────────┐              │              ┌─────────────────┐
+      │  Buyer Agent    │              │              │  Seller Agent   │
+      │  (买家代理)      │              │              │  (卖家客服)      │
+      └─────────────────┘              │              └─────────────────┘
+               │                       │                       │
+               │    ┌──────────────────┴──────────────────┐    │
+               │    │           砍价循环                    │    │
+               │    │  ┌────────────────────────────────┐ │    │
+               │    │  │ 1. Hub 向 Buyer 请求出价        │ │    │
+               │    │  │ 2. Buyer 生成砍价消息           │ │    │
+               │    │  │ 3. Hub 向 Seller 发送买家消息   │ │    │
+               │    │  │ 4. Seller 生成报价回复          │ │    │
+               │    │  │ 5. Hub 将报价发给 Buyer 判断    │ │    │
+               │    │  │ 6. 重复直到 Buyer 接受或放弃    │ │    │
+               │    │  └────────────────────────────────┘ │    │
+               │    └─────────────────────────────────────┘    │
+               │                       │                       │
+               │    ┌──────────────────┴──────────────────┐    │
+               │    │           成交确认                    │    │
+               │    │  ┌────────────────────────────────┐ │    │
+               │    │  │ 7. Hub 向 Seller 发送聊天记录   │ │    │
+               │    │  │ 8. Seller 分析并返回成交价      │ │    │
+               │    │  └────────────────────────────────┘ │    │
+               │    └─────────────────────────────────────┘    │
+               │                       │                       │
+               │    ┌──────────────────┴──────────────────┐    │
+               │    │           签名结算                    │    │
+               │    │  ┌────────────────────────────────┐ │    │
+               │    │  │ 9. Hub 向 Buyer 请求签名        │ │    │
+               │    │  │ 10. Buyer 签署交易              │ │    │
+               │    │  │ 11. 提交跨链结算                │ │    │
+               │    │  └────────────────────────────────┘ │    │
+               │    └─────────────────────────────────────┘    │
+               │                       │                       │
+               ▼                       ▼                       ▼
 ```
 
-### 3) SSE / AG-UI
-- SSE（连接即启动）：`GET /api/agent/stream?scenario=multi`
-- SSE（观战）：`GET /api/agent/stream?sessionId=...`
-- AG-UI：在 `/api/agui/run` 的 `forwardedProps` 里传 `scenario: "multi"`
+### 流程说明
+
+**第一阶段：商品发现**
+
+用户输入购买意向（如"帮我买一把 10 USDC 以内的武器"），Agent Hub 自动搜索市场，筛选符合预算的商品和店铺。
+
+**第二阶段：多卖家并行砍价**
+
+Agent Hub 同时派出 Buyer Agent 与多个 Seller Agent 进行价格谈判：
+- 每个 Seller Agent 有不同的谈判风格（aggressive / pro / friendly）
+- Buyer Agent 根据预算和策略自动出价
+- 所有对话通过 SSE 实时推送给前端展示
+
+**第三阶段：价格确定**
+
+砍价结束后，Agent Hub 将完整聊天记录发送给 Seller Agent，由其分析对话内容并提取最终成交价格。这确保了对话中达成的价格与实际成交价一致。
+
+**第四阶段：签名与结算**
+
+Buyer Agent 签署交易后，通过 ZetaChain 完成跨链结算。
+
+---
+
+## 关键技术细节
+
+### 1. 交易签名验证
+
+采用 EIP-712 结构化签名，确保交易不可篡改：
+- Buyer Agent 持有用户授权的私钥
+- 签名内容包含：买家地址、卖家地址、成交价格、NFT 合约、Token ID、过期时间
+- 智能合约验证签名后才会执行转账
+
+### 2. 预算控制
+
+Buyer Agent 实现多层预算限制：
+- 单笔交易上限
+- 每日总预算
+- 实时余额追踪
+
+砍价过程中，Buyer Agent 会自动拒绝超出预算的报价。
+
+### 3. 会话隔离
+
+支持多用户并发使用：
+- 每个会话有独立的 Session ID
+- 多卖家砍价时，每个卖家有独立的对话上下文
+- 避免不同用户或不同卖家之间的数据混淆
+
+### 4. SSE 事件流
+
+前端通过 Server-Sent Events 实时接收：
+- 聊天消息（买家/卖家/系统）
+- 工具调用状态
+- 时间线进度
+- 交易状态更新
+
+---
+
+## 快速启动
+
+```bash
+# 终端 1: Market 前端
+cd apps/market && pnpm dev
+
+# 终端 2: Agent Hub
+cd apps/agent && pnpm dev
+
+# 终端 3: Buyer Agent
+cd apps/buyer-agent && pnpm dev
+
+# 终端 4-5: Seller Agents
+cd apps/seller-agent && pnpm dev:a
+cd apps/seller-agent && pnpm dev:b
+```
+
+---
+
+## 环境配置
+
+```bash
+# apps/agent/.env
+PORT=8080
+WEB_BASE_URL=http://localhost:3001
+BUYER_AGENT_URL=http://localhost:8083
+SELLER_AGENT_A_URL=http://localhost:8081
+SELLER_AGENT_B_URL=http://localhost:8082
+
+# LLM 配置
+MODEL=qwen3-max
+OPENAI_API_KEY=your-api-key
+OPENAI_BASE_URL=https://your-llm-endpoint
+```
+
+---
+
+## 相关文档
+
+- [Buyer Agent](../buyer-agent/README.md) - 买家代理服务
+- [Seller Agent](../seller-agent/README.md) - 卖家客服服务
+- [Market](../market/README.md) - 市场前端

@@ -5,6 +5,7 @@ import type {
   ChatMessagePayload,
   DealProposalPayload,
   FlowEmitter,
+  SettlementCompletePayload,
   TimelineStepPayload,
   ToolCallPayload,
   ToolResultPayload,
@@ -91,6 +92,10 @@ export class AguiEmitter implements FlowEmitter {
 
   dealProposal(proposal: DealProposalPayload) {
     this.send({ type: EventType.CUSTOM, name: "universal_market.deal_proposal", value: proposal } as any);
+  }
+
+  settlementComplete(payload: SettlementCompletePayload) {
+    this.send({ type: EventType.CUSTOM, name: "universal_market.settlement_complete", value: payload } as any);
   }
 
   toolCall(call: ToolCallPayload) {

@@ -6,6 +6,7 @@ export type SseEventName =
   | "tool_result"
   | "timeline_step"
   | "deal_proposal"
+  | "settlement_complete"
   | "state"
   | "done"
   | "error";

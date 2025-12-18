@@ -44,6 +44,7 @@ type BuyerAgentNegotiateResponse = {
   message: string;
   decision?: {
     accept: boolean;
+    acceptedPrice?: string;
     offerPriceUSDC?: string;
     reason?: string;
   };
@@ -83,6 +84,23 @@ type BuyerAgentSignResponse = {
   ok: true;
   signature: string;
   signer: string;
+};
+
+type SellerPrepareDealResponse = {
+  ok: boolean;
+  dealReady?: boolean;
+  sellerId?: string;
+  sellerName?: string;
+  deal?: {
+    productId: string;
+    productName: string;
+    storeId: string;
+    storeName: string;
+    listPriceUSDC: string;
+    finalPriceUSDC: string;
+    discount: number;
+  };
+  error?: string;
 };
 
 type CatalogStore = {
@@ -188,6 +206,46 @@ async function callBuyerAgentSign(
     const json = (await res.json().catch(() => null)) as BuyerAgentSignResponse | null;
     return json?.ok ? json : null;
   } catch {
+    return null;
+  }
+}
+
+/**
+ * 调用 Seller Agent 的 prepare_deal 接口
+ * 从聊天记录中提取最终成交价格
+ */
+async function callSellerPrepareDeal(
+  upstream: string,
+  payload: {
+    sessionId: string;
+    transcript: Array<{ speaker: "buyer" | "seller"; content: string }>;
+    product: { id: string; name: string; listPriceUSDC: string };
+    store: { id: string; name: string };
+  },
+  signal: AbortSignal
+): Promise<SellerPrepareDealResponse | null> {
+  try {
+    // upstream 可能是 http://localhost:8081/api/seller/chat 格式
+    // 需要提取基础 URL 来调用 prepare_deal
+    const baseUrl = upstream.replace(/\/api\/seller\/chat$/, "");
+    const url = `${baseUrl}/api/seller/prepare_deal`;
+    console.log(`[multiAgentFlow] Calling prepare_deal: ${url}`);
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+    if (!res.ok) {
+      console.warn(`[multiAgentFlow] prepare_deal returned ${res.status}`);
+      return null;
+    }
+    const json = (await res.json().catch(() => null)) as SellerPrepareDealResponse | null;
+    console.log(`[multiAgentFlow] prepare_deal result:`, JSON.stringify(json));
+    return json;
+  } catch (err) {
+    console.warn(`[multiAgentFlow] callSellerPrepareDeal failed:`, err);
     return null;
   }
 }
@@ -420,10 +478,12 @@ export async function runMultiAgentFlow({
     }
   }
 
-  // Determine buyer's budget (use maxPerDealUSDC for single transaction limit)
-  const budget = buyerAgentConfig
-    ? parseFloat(buyerAgentConfig.budget.maxPerDealUSDC)
-    : budgetUSDC ?? extractBudgetFromGoal(goal) ?? 999999;
+  // Determine buyer's budget
+  // Priority: explicit budgetUSDC param > goal text extraction > buyerAgentConfig > default
+  const goalBudget = extractBudgetFromGoal(goal);
+  const agentBudget = buyerAgentConfig ? parseFloat(buyerAgentConfig.budget.maxPerDealUSDC) : null;
+  const budget = budgetUSDC ?? goalBudget ?? agentBudget ?? 999999;
+  console.log(`[multiAgentFlow] Budget: ${budget} USDC (from: ${budgetUSDC ? 'param' : goalBudget ? 'goal' : agentBudget ? 'agent' : 'default'})`);
 
   const emitTool = async <T,>(name: string, args: unknown, runner: () => Promise<T>) => {
     const id = randomUUID();
@@ -512,7 +572,7 @@ export async function runMultiAgentFlow({
     round: number,
     stage: "opening" | "bargain" | "counter",
     sellerMessage?: string
-  ): Promise<{ message: string; decision?: { accept: boolean; offerPriceUSDC?: string } }> => {
+  ): Promise<{ message: string; decision?: { accept: boolean; acceptedPrice?: string; offerPriceUSDC?: string } }> => {
     const listPrice = parsePriceUSDC(thread.product.priceUSDC) ?? 80;
     const sellerName = thread.store.sellerAgentName || thread.store.sellerAgent?.name || "卖家客服 Agent";
     const storeName = thread.store.name || thread.store.id;
@@ -559,16 +619,17 @@ export async function runMultiAgentFlow({
       // Decide whether to accept
       const shouldAccept = shouldAcceptQuoteInternal(listPrice, thread.lastQuoteUSDC, round);
       if (shouldAccept) {
+        const acceptedPrice = thread.lastQuoteUSDC;
         const acceptText = buyerChat
           ? await agentReply({
               chat: buyerChat,
               systemPrompt: buildBuyerSystemPrompt(goal, buyerNote),
               transcript: thread.transcript,
               self: "buyer",
-              instruction: `卖家报价 ${priceString(thread.lastQuoteUSDC)} USDC，你决定接受这个价格成交。请用1-2句话表达同意并确认购买。`,
+              instruction: `卖家报价 ${priceString(acceptedPrice)} USDC，你决定接受这个价格成交。请用1-2句话表达同意并确认购买，明确提到接受 ${priceString(acceptedPrice)} USDC 的价格。`,
             })
-          : `好，${priceString(thread.lastQuoteUSDC)} USDC 成交！请帮我安排发货。`;
-        return { message: acceptText, decision: { accept: true } };
+          : `好，${priceString(acceptedPrice)} USDC 成交！请帮我安排发货。`;
+        return { message: acceptText, decision: { accept: true, acceptedPrice: priceString(acceptedPrice) } };
       }
     }
 
@@ -619,7 +680,11 @@ export async function runMultiAgentFlow({
       if (buyerResponse.decision?.accept && thread.lastQuoteUSDC) {
         dealAccepted = true;
         acceptedThread = thread;
-        acceptedPrice = thread.lastQuoteUSDC;
+        // Use acceptedPrice from decision if available, otherwise fall back to seller's last quote
+        const agreedPrice = buyerResponse.decision.acceptedPrice
+          ? parsePriceUSDC(buyerResponse.decision.acceptedPrice) ?? thread.lastQuoteUSDC
+          : thread.lastQuoteUSDC;
+        acceptedPrice = agreedPrice;
 
         // Emit buyer acceptance message
         thread.transcript.push({ speaker: "buyer", content: buyerResponse.message });
@@ -635,11 +700,11 @@ export async function runMultiAgentFlow({
           storeName: thread.store.name || thread.store.id,
           productId: thread.product.id,
           productName: thread.product.name,
-          priceUSDC: priceString(thread.lastQuoteUSDC),
+          priceUSDC: priceString(agreedPrice),
         });
 
         // Emit seller confirmation
-        const confirmText = `太好了，感谢您的信任！${priceString(thread.lastQuoteUSDC)} USDC 成交确认，马上为您处理订单。\n报价: ${priceString(thread.lastQuoteUSDC)} USDC`;
+        const confirmText = `太好了，感谢您的信任！${priceString(agreedPrice)} USDC 成交确认，马上为您处理订单。\n报价: ${priceString(agreedPrice)} USDC`;
         thread.transcript.push({ speaker: "seller", content: confirmText });
         emitter.message({
           id: randomUUID(),
@@ -653,7 +718,7 @@ export async function runMultiAgentFlow({
           storeName: thread.store.name || thread.store.id,
           productId: thread.product.id,
           productName: thread.product.name,
-          priceUSDC: priceString(thread.lastQuoteUSDC),
+          priceUSDC: priceString(agreedPrice),
         });
 
         break negotiationLoop;
@@ -746,6 +811,35 @@ export async function runMultiAgentFlow({
     }
   }
 
+  // 调用 Seller Agent 的 prepare_deal 获取最终确认价格（从聊天记录分析）
+  if (winner && winner.sellerUpstream) {
+    const prepareDealResult = await callSellerPrepareDeal(
+      winner.sellerUpstream,
+      {
+        sessionId,
+        transcript: winner.transcript,
+        product: {
+          id: winner.product.id,
+          name: winner.product.name,
+          listPriceUSDC: winner.product.priceUSDC,
+        },
+        store: {
+          id: winner.store.id,
+          name: winner.store.name || winner.store.id,
+        },
+      },
+      signal
+    );
+
+    if (prepareDealResult?.ok && prepareDealResult.dealReady && prepareDealResult.deal) {
+      const confirmedPrice = parsePriceUSDC(prepareDealResult.deal.finalPriceUSDC);
+      if (confirmedPrice !== null) {
+        console.log(`[multiAgentFlow] prepare_deal 确认价格: ${confirmedPrice} (原 winnerPrice: ${winnerPrice})`);
+        winnerPrice = confirmedPrice;
+      }
+    }
+  }
+
   // Handle the case where all quotes are over budget
   if (allOverBudget) {
     emitter.message({
@@ -756,6 +850,21 @@ export async function runMultiAgentFlow({
       content: `砍价结束。所有卖家报价均超出预算（${priceString(budget)} USDC），无法达成交易。`,
       ts: now(),
     });
+
+    // Emit cancelled deal_proposal for each seller so frontend can show "交易取消"
+    for (const thread of threads) {
+      const lastPrice = thread.lastQuoteUSDC ?? (parsePriceUSDC(thread.product.priceUSDC) ?? 0);
+      emitter.dealProposal({
+        id: `${thread.store.id}-${thread.product.id}`,
+        storeId: thread.store.id,
+        storeName: thread.store.name || thread.store.id,
+        productId: thread.product.id,
+        productName: thread.product.name,
+        priceUSDC: priceString(lastPrice),
+        status: "cancelled",
+        reason: "over_budget",
+      });
+    }
 
     emitter.timelineStep({
       id: "negotiate",
@@ -982,6 +1091,14 @@ export async function runMultiAgentFlow({
   );
 
   emitter.timelineStep({ id: "settle", status: "done", detail: `耗时 ${Date.now() - startedAt}ms`, ts: now() });
+
+  // Emit settlement complete to update UI status from "待结算" to "已成交"
+  emitter.settlementComplete({
+    storeId: winner.store.id,
+    productId: winner.product.id,
+    dealId: `${winner.store.id}-${winner.product.id}`,
+  });
+
   emitter.state({ settling: false });
   emitter.done({ ok: true });
 }

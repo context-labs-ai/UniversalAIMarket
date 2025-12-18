@@ -61,7 +61,12 @@ export interface SerializedDeal {
 }
 
 // === Seller Chat Types (per-seller grouped chat) ===
-export type SellerChatStatus = "negotiating" | "agreed" | "failed";
+// negotiating: 砍价中
+// agreed: 谈判成功，待结算
+// settled: 结算完成，真正成交
+// failed: 谈判失败
+// cancelled: 交易取消（如超预算）
+export type SellerChatStatus = "negotiating" | "agreed" | "settled" | "failed" | "cancelled";
 
 export interface SellerChat {
   sellerId: string;
