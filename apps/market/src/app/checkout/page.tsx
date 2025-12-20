@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCart } from "@/lib/cartStore";
+import { AuthGuard } from "@/components/auth";
 
 type TimelineStep = {
   id: string;
@@ -304,8 +305,10 @@ function CheckoutContent() {
 
 export default function CheckoutPage() {
   return (
-    <Suspense fallback={<div className="mx-auto max-w-4xl px-5 py-10 text-white/50">加载中...</div>}>
-      <CheckoutContent />
-    </Suspense>
+    <AuthGuard message="结算需要连接钱包以完成跨链交易">
+      <Suspense fallback={<div className="mx-auto max-w-4xl px-5 py-10 text-white/50">加载中...</div>}>
+        <CheckoutContent />
+      </Suspense>
+    </AuthGuard>
   );
 }

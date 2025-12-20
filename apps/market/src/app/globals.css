@@ -40,47 +40,47 @@ body {
   overflow: hidden;
 }
 
-/* 流动油滴效果 */
+/* 流动油滴效果 - 更明显更亮 */
 .bg-cosmic::before,
 .bg-cosmic::after {
   content: '';
   position: absolute;
-  filter: blur(80px);
+  filter: blur(100px);
 }
 
 .bg-cosmic::before {
   top: -20%;
   left: -10%;
-  width: 60%;
-  height: 60%;
+  width: 65%;
+  height: 65%;
   background: linear-gradient(135deg,
-    rgba(212, 165, 116, 0.12) 0%,
-    rgba(140, 100, 180, 0.08) 50%,
-    rgba(100, 140, 200, 0.06) 100%);
+    rgba(212, 165, 116, 0.25) 0%,
+    rgba(160, 120, 200, 0.18) 50%,
+    rgba(100, 160, 220, 0.12) 100%);
   border-radius: 60% 40% 55% 45%;
-  animation: blob-1 25s ease-in-out infinite;
+  animation: blob-1 18s ease-in-out infinite;
 }
 
 .bg-cosmic::after {
   bottom: -15%;
   right: -10%;
-  width: 55%;
-  height: 55%;
+  width: 60%;
+  height: 60%;
   background: linear-gradient(225deg,
-    rgba(200, 130, 170, 0.10) 0%,
-    rgba(201, 149, 108, 0.08) 50%,
-    rgba(160, 120, 180, 0.06) 100%);
+    rgba(220, 140, 180, 0.22) 0%,
+    rgba(212, 165, 116, 0.18) 50%,
+    rgba(180, 140, 200, 0.12) 100%);
   border-radius: 45% 55% 40% 60%;
-  animation: blob-2 30s ease-in-out infinite;
+  animation: blob-2 22s ease-in-out infinite;
 }
 
-/* 额外的流动层 - 通过 box-shadow 模拟多个 blob */
+/* 额外的流动层 - 更亮的颜色 */
 .bg-cosmic {
   background:
-    radial-gradient(ellipse 40% 50% at 70% 20%, rgba(100, 130, 190, 0.06) 0%, transparent 70%),
-    radial-gradient(ellipse 50% 40% at 20% 80%, rgba(232, 213, 163, 0.05) 0%, transparent 70%),
-    radial-gradient(ellipse 45% 55% at 85% 70%, rgba(190, 140, 170, 0.05) 0%, transparent 70%);
-  animation: bg-shift 40s ease-in-out infinite alternate;
+    radial-gradient(ellipse 45% 55% at 70% 20%, rgba(120, 150, 210, 0.15) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 45% at 20% 80%, rgba(232, 200, 140, 0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 60% at 85% 70%, rgba(200, 150, 180, 0.12) 0%, transparent 70%);
+  animation: bg-shift 30s ease-in-out infinite alternate;
 }
 
 @keyframes blob-1 {

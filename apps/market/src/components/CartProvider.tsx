@@ -1,31 +1,32 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { CartContext, type CartItem } from "@/lib/cartStore";
 
 const CART_STORAGE_KEY = "universal-ai-market-cart";
 
-function getInitialItems(): CartItem[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const stored = localStorage.getItem(CART_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
-
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>(getInitialItems);
-  const isFirstRender = useRef(true);
+  const [items, setItems] = useState<CartItem[]>([]);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
+    if (typeof window === "undefined") return;
+    try {
+      const stored = localStorage.getItem(CART_STORAGE_KEY);
+      if (stored) {
+        setItems(JSON.parse(stored));
+      }
+    } catch {
+      // ignore storage errors
+    } finally {
+      setHydrated(true);
     }
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
-  }, [items]);
+  }, [items, hydrated]);
 
   const addItem = useCallback((item: Omit<CartItem, "quantity">) => {
     setItems((prev) => {
