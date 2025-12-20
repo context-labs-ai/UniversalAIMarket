@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+dist/
+out/
+
+# Development
+*.log
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+coverage/
+
+# Contracts (not needed for frontend deployment)
+contracts/
+artifacts/
+cache/
+typechain-types/
+
+# Scripts (not needed for deployment)
+scripts/
+
+# Documentation
+*.md
+!README.md
