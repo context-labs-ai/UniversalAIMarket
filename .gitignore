@@ -48,6 +48,9 @@ artifacts/
 localnet.json
 deployed.json
 
+# Railway CLI
+.railway/
+
 # Misc
 *.tgz
 .tsbuildinfo

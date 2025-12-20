@@ -1,6 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "cd ../.. && pnpm install && pnpm agent:build"
+buildCommand = "pnpm install --frozen-lockfile && pnpm build"
 
 [deploy]
 startCommand = "pnpm start"
