@@ -255,11 +255,11 @@ function CheckoutContent() {
               <button
                 onClick={() => {
                   clearCart();
-                  window.location.href = "/";
+                  window.location.href = "/dashboard";
                 }}
                 className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70 transition-colors hover:bg-white/10"
               >
-                返回首页
+                返回市场
               </button>
             </div>
           )}

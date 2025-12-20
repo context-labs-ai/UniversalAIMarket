@@ -1,6 +1,14 @@
 # Universal AI Market
 
-> AI Agent + ZetaChain = 无缝跨链购物体验
+<div align="center">
+  <img src="./apps/market/public/logo.svg" width="200" alt="Universal AI Market Logo" />
+  <h1>Universal AI Market</h1>
+  <p><strong>AI Agent + ZetaChain = 无缝跨链购物体验</strong></p>
+</div>
+
+
+
+
 
 ## 项目愿景
 
@@ -63,6 +71,19 @@ NFT 由智能合约托管，只有在收到跨链消息后才会释放。卖家�
 ```
 
 详细架构说明见 [Agent Hub 文档](./apps/agent/README.md)。
+
+### 5. MCP（Model Context Protocol）接入（可选 / 规划）
+
+我们计划将市场网站作为 **agent 的入口**，对外提供 MCP Server（或 MCP over HTTP/SSE），让第三方 agent 以标准协议发现能力、调用工具、拿到流式结果。  
+这个方向是**兼容而不是替换**：
+
+- **保留 discovery**（`/.well-known/...`）作为市场元信息
+- **新增 MCP endpoint**，把现有工具（如 `/api/agent/tool`）映射为 MCP tools
+- **认证沿用签名挑战**（challenge/verify），MCP 调用携带 session
+
+同时要明确边界：
+- **MCP 解决**：标准化工具接入、上下文传递、降低第三方 agent 接入成本
+- **MCP 不解决**：认证、结算、风控/限额、幂等/回滚等业务安全逻辑（这些仍由我们定义）
 
 ---
 

@@ -10,7 +10,7 @@ export default function CartPage() {
     return (
       <main className="mx-auto max-w-4xl px-5 py-10">
         <header>
-          <Link href="/" className="text-xs text-white/50 hover:text-white/70">
+          <Link href="/dashboard" className="text-xs text-white/50 hover:text-white/70">
             ← 返回市场
           </Link>
           <h1 className="mt-2 text-2xl font-semibold text-white/90">购物车</h1>
@@ -27,7 +27,7 @@ export default function CartPage() {
           </svg>
           <p className="mt-4 text-sm text-white/50">购物车是空的</p>
           <Link
-            href="/"
+            href="/dashboard"
             className="mt-6 rounded-lg bg-indigo-500/20 px-4 py-2 text-sm text-indigo-200 transition-colors hover:bg-indigo-500/30"
           >
             去逛逛
@@ -41,7 +41,7 @@ export default function CartPage() {
     <main className="mx-auto max-w-4xl px-5 py-10">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <Link href="/" className="text-xs text-white/50 hover:text-white/70">
+          <Link href="/dashboard" className="text-xs text-white/50 hover:text-white/70">
             ← 返回市场
           </Link>
           <h1 className="mt-2 text-2xl font-semibold text-white/90">购物车</h1>

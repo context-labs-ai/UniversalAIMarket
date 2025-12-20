@@ -18,7 +18,7 @@ export default function AgentPage() {
     <main className="mx-auto max-w-4xl px-5 py-10">
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <Link href="/" className="text-xs text-white/50 hover:text-white/70">
+          <Link href="/dashboard" className="text-xs text-white/50 hover:text-white/70">
             ← 返回市场
           </Link>
           <h1 className="mt-2 text-2xl font-semibold text-white/90">Agent 接入（MVP）</h1>

@@ -24,6 +24,10 @@ const spaceMono = Space_Mono({
 export const metadata: Metadata = {
   title: "Universal AI Market",
   description: "Cross-chain AI-powered marketplace with ZetaChain",
+  icons: {
+    icon: "/logo.svg",
+    shortcut: "/logo.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -5,6 +5,7 @@ import { SearchBar } from "@/components/SearchBar";
 import { CategoryFilter } from "@/components/CategoryFilter";
 import { CartButton } from "@/components/CartButton";
 import { AgentConnectButton } from "@/components/agent";
+import { Logo } from "@/components/Logo";
 
 type PageProps = {
   searchParams: Promise<{ category?: string }>;
@@ -21,7 +22,10 @@ export default async function HomePage({ searchParams }: PageProps) {
     <main className="mx-auto max-w-6xl px-5 py-10">
       <header className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <h1 className="text-2xl font-semibold tracking-tight">Universal AI Market</h1>
+          <div className="flex items-center gap-3">
+            <Logo size={40} />
+            <h1 className="text-2xl font-semibold tracking-tight">Universal AI Market</h1>
+          </div>
           <div className="flex items-center gap-2">
             <AgentConnectButton />
             <CartButton />

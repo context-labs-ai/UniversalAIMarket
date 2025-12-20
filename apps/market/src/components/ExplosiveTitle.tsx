@@ -23,7 +23,7 @@ class AudioSynth {
       }
 
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.value = 0.6; // Comfortable volume
+      this.masterGain.gain.value = 0.8; // Comfortable volume
 
       // Create warm, spacious reverb - like a wood-paneled room
       this.convolver = this.ctx.createConvolver();
@@ -65,7 +65,7 @@ class AudioSynth {
 
   unmute() {
     if (this.masterGain) {
-      this.masterGain.gain.value = 0.6;
+      this.masterGain.gain.value = 0.8;
     }
   }
 

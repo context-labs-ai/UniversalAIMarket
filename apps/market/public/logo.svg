@@ -1,0 +1,93 @@
+<svg width="200" height="200" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="core-glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(50 50) rotate(90) scale(40)">
+      <stop offset="0%" stop-color="#d4a574" stop-opacity="0.9" />
+      <stop offset="60%" stop-color="#c9956c" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#d4a574" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="ring-gradient" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e8d5a3" stop-opacity="0.8" />
+      <stop offset="50%" stop-color="#d4a574" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#f5efe4" stop-opacity="0.8" />
+    </linearGradient>
+    <filter id="glow-blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur" />
+      <feMerge>
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <style>
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      @keyframes pulse {
+        0% { opacity: 0.8; transform: scale(0.95); }
+        50% { opacity: 1; transform: scale(1.05); }
+        100% { opacity: 0.8; transform: scale(0.95); }
+      }
+      @keyframes orbit {
+        from { transform: rotate(-45deg); }
+        to { transform: rotate(315deg); }
+      }
+      .outer-ring {
+        transform-origin: 50px 50px;
+        animation: spin 20s linear infinite;
+      }
+      .inner-orbit {
+        transform-origin: 50px 50px;
+        animation: orbit 12s linear infinite;
+      }
+      .core {
+        transform-origin: 50px 50px;
+        animation: pulse 4s ease-in-out infinite;
+      }
+      .particle {
+        transform-origin: 50px 50px;
+        animation: spin 5s linear infinite reverse;
+      }
+    </style>
+  </defs>
+
+  <!-- Background for visibility in both light/dark modes -->
+  <circle cx="50" cy="50" r="48" fill="#0a0908" fill-opacity="0.2" />
+
+  <!-- Outer Orbit Ring -->
+  <path class="outer-ring"
+    d="M50 10 C 72.091 10 90 27.909 90 50 C 90 72.091 72.091 90 50 90 C 27.909 90 10 72.091 10 50 C 10 27.909 27.909 10 50 10 Z"
+    stroke="url(#ring-gradient)"
+    stroke-width="1.5"
+    fill="none"
+  />
+
+  <!-- Inner Tilted Orbit -->
+  <ellipse class="inner-orbit"
+    cx="50"
+    cy="50"
+    rx="38"
+    ry="14"
+    stroke="#f5efe4"
+    stroke-width="0.8"
+    stroke-opacity="0.4"
+    fill="none"
+  />
+
+  <!-- Central Core -->
+  <circle class="core"
+    cx="50"
+    cy="50"
+    r="16"
+    fill="url(#core-glow)"
+    filter="url(#glow-blur)"
+  />
+  
+  <!-- Solid Core Center -->
+  <circle cx="50" cy="50" r="5" fill="#f5efe4" fill-opacity="0.9" />
+
+  <!-- Orbiting Particle -->
+  <g class="particle">
+    <circle cx="50" cy="15" r="2.5" fill="#c8d86a" />
+  </g>
+
+</svg>
