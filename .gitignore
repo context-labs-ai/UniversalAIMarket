@@ -53,7 +53,7 @@ deployed.json
 
 # Misc
 *.tgz
-.tsbuildinfo
+*.tsbuildinfo
 
 # Unused apps
 apps/web/
