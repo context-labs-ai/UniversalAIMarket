@@ -96,38 +96,6 @@ npx ts-node scripts/utils/check_balances.ts
 
 ---
 
-### swap_zeta_to_eth.ts
-**用途**: 在 ZetaChain 上将 ZETA 兑换为 ETH.BASESEP ZRC-20
-
-```bash
-npx ts-node scripts/utils/swap_zeta_to_eth.ts
-```
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| swapAmount | 0.05 ZETA | 修改脚本中的 `swapAmount` 变量 |
-
-**运行时机**: 当 Market 或 Buyer 需要 ETH.BASESEP ZRC-20 时
-**运行次数**: 按需
-
----
-
-### swap_zeta_to_pol.ts
-**用途**: 在 ZetaChain 上将 ZETA 兑换为 POL ZRC-20
-
-```bash
-npx ts-node scripts/utils/swap_zeta_to_pol.ts
-```
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| swapAmount | 0.02 ZETA | 修改脚本中的 `swapAmount` 变量 |
-
-**运行时机**: 当 Market 或 Buyer 需要 POL ZRC-20 时
-**运行次数**: 按需
-
----
-
 ### fund_market_eth.ts
 **用途**: 将 ETH.BASESEP ZRC-20 转给 UniversalMarket（用于支付 withdraw 到 Base 的 gas）
 
@@ -159,40 +127,6 @@ npx ts-node scripts/utils/fund_market.ts
 **运行时机**: 部署新 Market 合约后，或 Market 的 POL ZRC-20 余额不足时
 **运行次数**: 按需
 **前置条件**: Deployer 需要有 POL ZRC-20
-
----
-
-### deposit_pol_to_zeta.ts
-**用途**: 从 Polygon Amoy 存入 POL 到 ZetaChain（获得 POL ZRC-20）
-
-```bash
-npx ts-node scripts/utils/deposit_pol_to_zeta.ts
-```
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| depositAmount | 0.02 POL | 修改脚本中的 `depositAmount` 变量 |
-
-**运行时机**: 当 Deployer 需要 POL ZRC-20 但没有时
-**运行次数**: 按需
-**前置条件**: Deployer 需要在 Polygon Amoy 上有 POL（原生代币）
-
----
-
-### deposit_eth_to_zeta.ts
-**用途**: 从 Base Sepolia 存入 ETH 到 ZetaChain（获得 ETH.BASESEP ZRC-20）
-
-```bash
-npx ts-node scripts/utils/deposit_eth_to_zeta.ts
-```
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| depositAmount | 0.005 ETH | 修改脚本中的 `depositAmount` 变量 |
-
-**运行时机**: 当 Deployer 需要 ETH.BASESEP ZRC-20 但没有时
-**运行次数**: 按需
-**前置条件**: Deployer 需要在 Base Sepolia 上有 ETH
 
 ---
 
@@ -242,19 +176,12 @@ npx hardhat run scripts/deploy/setup_demo.ts --network polygon_amoy
 npx hardhat run scripts/deploy/deploy_zetachain.ts --network zetaAthens
 # 将输出的地址添加到 .env
 
-# 4. 获取 ZRC-20 gas tokens（二选一）
-# 方式 A: 从外链存入
-npx ts-node scripts/utils/deposit_pol_to_zeta.ts
-npx ts-node scripts/utils/deposit_eth_to_zeta.ts
-
-# 方式 B: 用 ZETA swap（如果有 ZETA）
-npx ts-node scripts/utils/swap_zeta_to_eth.ts
-
-# 5. 给 Market 充值 gas tokens
+# 4. 给 Market 充值 gas tokens（需要先获取 ZRC-20）
+# 可通过 ZetaChain Faucet 或手动跨链桥获取 POL/ETH ZRC-20
 npx ts-node scripts/utils/fund_market.ts      # POL ZRC-20
 npx ts-node scripts/utils/fund_market_eth.ts  # ETH.BASESEP ZRC-20
 
-# 6. 检查状态
+# 5. 检查状态
 npx ts-node scripts/utils/check_balances.ts
 ```
 

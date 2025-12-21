@@ -7,9 +7,6 @@
 </div>
 
 
-
-
-
 ## 项目愿景
 
 想象一下这样的场景：你在玩一款游戏，想购买一把强力武器 NFT。这个 NFT 在 Polygon 链上，而你的钱包里只有 Base 链上的 USDC。传统方式下，你需要：
@@ -24,6 +21,13 @@
 我们的解决方案是：**让 AI Agent 替你完成一切**。
 
 你只需要告诉 Agent："帮我买那把量子之剑"，剩下的事情全部自动完成——跨链支付、卖家收款、NFT 交付，一气呵成。
+
+<div align="center">
+  <a href="https://youtu.be/nE3dKHVTGT8">
+    <img src="https://img.youtube.com/vi/nE3dKHVTGT8/maxresdefault.jpg" width="600" alt="Demo Video" />
+  </a>
+  <p><em>点击观看演示视频</em></p>
+</div>
 
 ---
 
@@ -192,7 +196,23 @@ NFT 由智能合约托管，只有在收到跨链消息后才会释放。卖家�
 
 ## 卖家接入指南
 
-### 准备工作
+### 方式一：前端一键部署（推荐）
+
+我们提供了 **一键部署** 功能，无需编写代码即可完成 NFT 铸造、托管和上架：
+
+1. 访问 **http://localhost:3001/seller**（卖家中心）
+2. 连接钱包并填写商品信息：
+   - 商品名称、描述、价格
+   - 卖家 Agent 名称和砍价策略
+3. 点击 **"部署并上架"**，系统自动完成：
+   - ✅ 铸造 NFT 到 Polygon
+   - ✅ 部署/复用 Escrow 托管合约
+   - ✅ 将 NFT 存入托管
+   - ✅ 商品上架到市场
+
+整个流程只需 **一次签名**，约 1-2 分钟完成。
+
+### 方式二：手动部署（高级用户）
 
 如果你是卖家，想在 Universal AI Market 上销售 NFT，需要完成以下准备：
 
@@ -312,7 +332,6 @@ function transferOwnership(address newOwner) external onlyOwner;
 | 合约 | 地址 |
 |------|------|
 | UniversalEscrow | `0xC51ad62e3B794f9A9Caa349dec6C5c997c133922` |
-| MockNFT (示例) | `0xE0EFF1C50040d7Fbcd56F5f0fcFCBad751c07c57` |
 
 ### Base Sepolia
 | 合约 | 地址 |
@@ -350,17 +369,15 @@ cp .env.example .env
 |------|------|------|----------|------|
 | **Market Frontend** | 3001 | `apps/market` | `pnpm dev` | 市场前端 UI |
 | **Agent Hub** | 8080 | `apps/agent` | `pnpm dev` | Agent 协调中心，处理砍价流程 |
-| **Seller Agent A** | 8081 | `apps/seller-agent` | `pnpm dev:a` | 卖家 Agent（aggressive 风格） |
-| **Seller Agent B** | 8082 | `apps/seller-agent` | `pnpm dev:b` | 卖家 Agent（pro 风格） |
+| **Seller Agent** | 8081 | `apps/seller-agent` | `pnpm dev` | 卖家 Agent 服务 |
 | **Buyer Agent** | 8083 | `apps/buyer-agent` | `pnpm dev` | 买家 Agent（自托管服务） |
 
 ```bash
 # 分别在不同终端启动
 cd apps/market && pnpm dev          # 终端 1
 cd apps/agent && pnpm dev           # 终端 2
-cd apps/seller-agent && pnpm dev:a  # 终端 3
-cd apps/seller-agent && pnpm dev:b  # 终端 4
-cd apps/buyer-agent && pnpm dev     # 终端 5
+cd apps/seller-agent && pnpm dev    # 终端 3
+cd apps/buyer-agent && pnpm dev     # 终端 4
 ```
 
 打开 http://localhost:3001 访问市场前端
@@ -408,19 +425,6 @@ cd apps/buyer-agent && pnpm dev     # 终端 5
 
 ---
 
-## Gas 费用说明
-
-跨链交易需要的 Gas 费用：
-
-| 操作 | 链 | 费用 |
-|------|-----|------|
-| depositAndCall | Base | ~0.0001 ETH |
-| withdraw (USDC 转账) | ZetaChain → Base | ~0.001 POL (ZRC-20) |
-| call (NFT 释放) | ZetaChain → Polygon | ~0.0084 POL (ZRC-20) |
-
-**注意**：UniversalMarket 合约需要预存足够的 POL ZRC-20 来支付跨链调用 Polygon 的 Gas。
-
----
 
 ## 相关链接
 

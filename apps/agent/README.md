@@ -177,9 +177,8 @@ cd apps/agent && pnpm dev
 # 终端 3: Buyer Agent
 cd apps/buyer-agent && pnpm dev
 
-# 终端 4-5: Seller Agents
-cd apps/seller-agent && pnpm dev:a
-cd apps/seller-agent && pnpm dev:b
+# 终端 4: Seller Agent
+cd apps/seller-agent && pnpm dev
 ```
 
 ---
