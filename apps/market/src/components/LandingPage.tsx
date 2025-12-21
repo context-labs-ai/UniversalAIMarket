@@ -768,27 +768,15 @@ export function LandingPage() {
             whileHover={{ scale: 1.01, borderColor: "rgba(255,255,255,0.2)" }}
             className="group relative mt-10 aspect-video w-full max-w-4xl mx-auto rounded-3xl overflow-hidden border border-white/10 bg-[var(--landing-card)] transition-all duration-300 hover:shadow-[0_0_60px_rgba(178,199,58,0.1)]"
           >
-            {/* Placeholder */}
-            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-white/[0.03] to-transparent">
-              <div className="flex flex-col items-center gap-4">
-                <motion.div
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-white/5 backdrop-blur-md transition-all duration-300 group-hover:border-[var(--landing-accent)]/40 group-hover:bg-[var(--landing-accent)]/10"
-                >
-                  <Play className="h-8 w-8 text-white/50 transition-colors duration-300 group-hover:text-[var(--landing-accent)]" />
-                </motion.div>
-                <span className="text-sm text-[var(--landing-muted)]">Demo 视频即将上线</span>
-              </div>
-            </div>
-
-            {/* 装饰性角标 */}
-            <div className="absolute top-4 right-4 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-white/40 backdrop-blur-sm">
-              Coming Soon
-            </div>
-
-            {/* 实际视频 (后续替换) */}
-            {/* <video src="/demo.mp4" controls className="w-full h-full object-cover" /> */}
+            {/* YouTube Demo Video */}
+            <iframe
+              src="https://www.youtube.com/embed/nE3dKHVTGT8"
+              title="Universal AI Market Demo"
+              className="absolute inset-0 w-full h-full"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
           </motion.div>
         </motion.div>
       </section>
