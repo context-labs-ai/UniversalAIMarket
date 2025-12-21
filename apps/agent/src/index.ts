@@ -260,7 +260,16 @@ app.get("/api/agent/stream", async (req, res) => {
   const mode: DemoMode = req.query.mode === "testnet" ? "testnet" : "simulate";
   const checkoutMode: CheckoutMode = req.query.checkoutMode === "auto" ? "auto" : "confirm";
   const goal = isPresent(req.query.goal) ? String(req.query.goal) : "在市场里找一个合适的店铺并购买一件商品。";
-  const buyerNote = isPresent(req.query.buyerNote) ? String(req.query.buyerNote) : "";
+  const strategy = isPresent(req.query.strategy) ? String(req.query.strategy) : "";
+  const buyerNoteRaw = isPresent(req.query.buyerNote) ? String(req.query.buyerNote) : "";
+  // 优先使用 strategy（UI 传的砍价策略），其次是 buyerNote
+  const buyerNote = strategy || buyerNoteRaw;
+  const budgetUSDC = isPresent(req.query.budget) ? parseFloat(String(req.query.budget)) : 9999;
+
+  // Log buyer config
+  console.log(`[agent] goal: ${goal}`);
+  console.log(`[agent] budget: ${budgetUSDC} USDC`);
+  if (buyerNote) console.log(`[agent] buyerNote/strategy: ${buyerNote}`);
 
   const sessionId = randomUUID();
   const startedAt = Date.now();
@@ -289,6 +298,7 @@ app.get("/api/agent/stream", async (req, res) => {
         checkoutMode,
         goal,
         buyerNote,
+        budgetUSDC,
         emitter,
         sessionId,
         startedAt,
@@ -323,7 +333,7 @@ app.get("/api/agent/stream", async (req, res) => {
       ts: now(),
     });
 
-    const buyerOpening = await generateBuyerOpening(llmCfg, goal, buyerNote);
+    const buyerOpening = await generateBuyerOpening(llmCfg, goal, buyerNote, budgetUSDC);
     sendSse(res, "message", {
       id: randomUUID(),
       role: "buyer",
@@ -361,7 +371,7 @@ app.get("/api/agent/stream", async (req, res) => {
 
     const underBudget = products
       .map((p) => ({ p, price: parsePriceUSDC(p?.priceUSDC) }))
-      .filter((x) => x.price !== null && x.price <= 100)
+      .filter((x) => x.price !== null && x.price <= budgetUSDC)
       .sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
     const product = (underBudget[0]?.p ?? products[0]) as any;
 
@@ -392,7 +402,8 @@ app.get("/api/agent/stream", async (req, res) => {
     });
 
     const listPriceNum = parsePriceUSDC(product.priceUSDC) ?? 80;
-    const offerPrice = roundHalf(Math.max(1, listPriceNum * 0.6));
+    // Calculate offer as 60% of list price, minimum 0.01 USDC (not 1 USDC - to handle low-priced items)
+    const offerPrice = roundHalf(Math.max(0.01, listPriceNum * 0.6));
     const counterPrice = roundHalf(Math.max(offerPrice, listPriceNum * 0.9));
     const finalPrice = roundHalf(Math.min(listPriceNum, offerPrice + (counterPrice - offerPrice) * 0.75));
 
@@ -405,6 +416,7 @@ app.get("/api/agent/stream", async (req, res) => {
       productName: product.name ?? "商品",
       listPriceUSDC,
       offerPriceUSDC,
+      budgetUSDC,
     });
     sendSse(res, "message", {
       id: randomUUID(),

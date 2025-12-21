@@ -88,11 +88,14 @@ async function pollForEventTxHash({
     if (!provider) return undefined;
 
     const latest = await provider.getBlockNumber();
-    const events = await contract.queryFilter(filter, fromBlock, latest);
-    if (events.length > 0) {
-      return events[0].transactionHash;
+    // Skip query if no new blocks since last check
+    if (latest >= fromBlock) {
+      const events = await contract.queryFilter(filter, fromBlock, latest);
+      if (events.length > 0) {
+        return events[0].transactionHash;
+      }
+      fromBlock = latest + 1;
     }
-    fromBlock = latest + 1;
     await new Promise((r) => setTimeout(r, pollMs));
   }
   return undefined;

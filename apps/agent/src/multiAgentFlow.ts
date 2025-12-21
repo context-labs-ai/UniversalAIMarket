@@ -120,6 +120,15 @@ type CatalogProduct = {
   highlights?: string[];
   inventory?: string;
   leadTime?: string;
+  // 商品的 Seller Agent 配置（Market API 返回 sellerConfig 字段）
+  sellerConfig?: {
+    name?: string;
+    style?: "aggressive" | "pro" | "friendly";
+    walletAddress?: string;
+    minPriceFactor?: number;
+    maxDiscountPerRound?: number;
+    prompt?: string;
+  };
 };
 
 type SellerThread = {
@@ -145,6 +154,7 @@ function getSellerUpstreams(): string[] {
   for (const url of combined) {
     if (!unique.includes(url)) unique.push(url);
   }
+  console.log(`[multiAgentFlow] Seller upstreams: ${JSON.stringify(unique)}`);
   return unique;
 }
 
@@ -221,6 +231,13 @@ async function callSellerPrepareDeal(
     transcript: Array<{ speaker: "buyer" | "seller"; content: string }>;
     product: { id: string; name: string; listPriceUSDC: string };
     store: { id: string; name: string };
+    sellerConfig?: {
+      name?: string;
+      style?: "aggressive" | "pro" | "friendly";
+      minPriceFactor?: number;
+      maxDiscountPerRound?: number;
+      prompt?: string;
+    };
   },
   signal: AbortSignal
 ): Promise<SellerPrepareDealResponse | null> {
@@ -289,8 +306,8 @@ function sellerFloorFactor(style: CatalogStore["sellerStyle"]) {
   return 0.85;
 }
 
-function buildBuyerSystemPrompt(goal: string, buyerNote: string) {
-  return [
+function buildBuyerSystemPrompt(goal: string, buyerNote: string, budgetUSDC?: number) {
+  const lines = [
     "你是买家 Agent，要在电商市场中完成一次购买。",
     "你会同时联系多个卖家客服 Agent 获取报价并砍价，然后选择更划算的一家下单。",
     "要求：中文、简洁、自然对话；可以强势但禁止辱骂/脏话/人身攻击。",
@@ -298,9 +315,11 @@ function buildBuyerSystemPrompt(goal: string, buyerNote: string) {
     "",
     `目标：${goal}`,
     buyerNote.trim() ? `补充：${buyerNote.trim()}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ];
+  if (budgetUSDC !== undefined && budgetUSDC < 9999) {
+    lines.push(`【重要】你的预算上限是 ${budgetUSDC} USDC。你的出价必须低于商品标价，且不能超过预算。绝对不要报出比标价更高的价格！`);
+  }
+  return lines.filter(Boolean).join("\n");
 }
 
 function buildSellerSystemPrompt(store: CatalogStore, product: CatalogProduct) {
@@ -332,6 +351,13 @@ async function callSellerAgent(
     buyerMessage: string;
     store: { id: string; name?: string };
     product: { id: string; name?: string; priceUSDC?: string; highlights?: string[]; inventory?: string };
+    sellerConfig?: {
+      name?: string;
+      style?: "aggressive" | "pro" | "friendly";
+      minPriceFactor?: number;
+      maxDiscountPerRound?: number;
+      prompt?: string;
+    };
   },
   signal: AbortSignal
 ): Promise<{ sellerName?: string; reply?: string; quotePriceUSDC?: string } | null> {
@@ -351,6 +377,62 @@ async function callSellerAgent(
       quotePriceUSDC: typeof json.quotePriceUSDC === "string" ? json.quotePriceUSDC : undefined,
     };
   } catch {
+    return null;
+  }
+}
+
+/**
+ * 调用 Seller Agent 生成成交确认消息
+ * 专门用于成交时，让 seller 用自己的话术风格确认成交
+ */
+async function callSellerClosingMessage(
+  upstream: string,
+  payload: {
+    sessionId: string;
+    finalPrice: number;
+    store: { id: string; name?: string };
+    product: { id: string; name?: string; priceUSDC?: string };
+    sellerConfig?: {
+      name?: string;
+      style?: "aggressive" | "pro" | "friendly";
+      prompt?: string;
+    };
+  },
+  signal: AbortSignal
+): Promise<string | null> {
+  try {
+    // 使用 chat 接口，但发送成交确认消息
+    console.log(`[callSellerClosingMessage] Calling ${upstream}`);
+    const res = await fetch(upstream, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: payload.sessionId,
+        round: 99, // 特殊轮次表示成交
+        buyerMessage: `成交！我同意 ${payload.finalPrice.toFixed(2)} USDC 的价格，请确认订单。`,
+        store: payload.store,
+        product: payload.product,
+        sellerConfig: payload.sellerConfig,
+      }),
+      signal,
+    });
+    console.log(`[callSellerClosingMessage] Response status: ${res.status}`);
+    if (!res.ok) {
+      console.log(`[callSellerClosingMessage] Response not ok`);
+      return null;
+    }
+    const json = (await res.json().catch((e) => {
+      console.log(`[callSellerClosingMessage] JSON parse error: ${e}`);
+      return null;
+    })) as any;
+    console.log(`[callSellerClosingMessage] Response JSON: ${JSON.stringify(json).slice(0, 200)}`);
+    if (!json || json.ok !== true || !json.reply) {
+      console.log(`[callSellerClosingMessage] Invalid response: ok=${json?.ok}, reply=${!!json?.reply}`);
+      return null;
+    }
+    return json.reply;
+  } catch (err) {
+    console.log(`[callSellerClosingMessage] Error: ${err}`);
     return null;
   }
 }
@@ -524,7 +606,11 @@ export async function runMultiAgentFlow({
       .map((p) => ({ p, price: parsePriceUSDC(p?.priceUSDC) }))
       .sort((a, b) => (a.price ?? 0) - (b.price ?? 0))[0]?.p;
     if (!product) continue;
-    const sellerUpstream = sellerUpstreams[threads.length] ?? undefined;
+    // 如果只有一个 seller upstream，所有线程都用它；否则按索引分配
+    const sellerUpstream = sellerUpstreams.length === 1
+      ? sellerUpstreams[0]
+      : (sellerUpstreams[threads.length] ?? sellerUpstreams[0] ?? undefined);
+    console.log(`[multiAgentFlow] Thread ${threads.length}: store=${store.id}, sellerUpstream=${sellerUpstream || 'NONE'}`);
     threads.push({ store, product, transcript: [], sellerUpstream });
   }
 
@@ -623,7 +709,7 @@ export async function runMultiAgentFlow({
         const acceptText = buyerChat
           ? await agentReply({
               chat: buyerChat,
-              systemPrompt: buildBuyerSystemPrompt(goal, buyerNote),
+              systemPrompt: buildBuyerSystemPrompt(goal, buyerNote, budget),
               transcript: thread.transcript,
               self: "buyer",
               instruction: `卖家报价 ${priceString(acceptedPrice)} USDC，你决定接受这个价格成交。请用1-2句话表达同意并确认购买，明确提到接受 ${priceString(acceptedPrice)} USDC 的价格。`,
@@ -634,7 +720,7 @@ export async function runMultiAgentFlow({
     }
 
     // Generate bargaining message
-    const buyerSystem = buildBuyerSystemPrompt(goal, buyerNote);
+    const buyerSystem = buildBuyerSystemPrompt(goal, buyerNote, budget);
     const buyerInstruction =
       stage === "opening"
         ? [
@@ -742,8 +828,12 @@ export async function runMultiAgentFlow({
           highlights: thread.product.highlights ?? [],
           inventory: thread.product.inventory,
         },
+        // 传递商品的 sellerConfig 配置给 seller-agent 服务
+        sellerConfig: thread.product.sellerConfig,
       };
+      console.log(`[multiAgentFlow] Calling seller: upstream=${thread.sellerUpstream || 'NONE'}, sellerConfig=${JSON.stringify(thread.product.sellerConfig)}`);
       const sellerRes = thread.sellerUpstream ? await callSellerAgent(thread.sellerUpstream, sellerPayload, signal) : null;
+      console.log(`[multiAgentFlow] Seller response: ${sellerRes ? JSON.stringify(sellerRes).slice(0, 200) : 'NULL (using fallback)'}`);
       const sellerText = sellerRes?.reply ?? fallbackSellerMessage(thread.store, thread.product, priceString(target));
       const sellerSpeakerName = sellerRes?.sellerName ?? sellerName;
 
@@ -810,6 +900,8 @@ export async function runMultiAgentFlow({
           id: winner.store.id,
           name: winner.store.name || winner.store.id,
         },
+        // 传递商品的 sellerConfig 配置
+        sellerConfig: winner.product.sellerConfig,
       },
       signal
     );
@@ -890,7 +982,7 @@ export async function runMultiAgentFlow({
     const reluctantAccept = buyerChat
       ? await agentReply({
           chat: buyerChat,
-          systemPrompt: buildBuyerSystemPrompt(goal, buyerNote),
+          systemPrompt: buildBuyerSystemPrompt(goal, buyerNote, budget),
           transcript: winner.transcript,
           self: "buyer",
           instruction: `砍价${MAX_ROUNDS}轮后，卖家最低报价是 ${priceString(winnerPrice)} USDC。你虽然觉得还是有点贵，但决定接受。用1-2句话勉强同意成交。`,
@@ -912,13 +1004,28 @@ export async function runMultiAgentFlow({
       priceUSDC: priceString(winnerPrice),
     });
 
-    // Seller confirms
+    // Seller confirms - 调用 seller-agent 生成成交确认消息
+    let closingText1 = `好的，${priceString(winnerPrice)} USDC 成交！感谢您的耐心，马上为您安排。\n报价: ${priceString(winnerPrice)} USDC`;
+    if (winner.sellerUpstream) {
+      const customClosing = await callSellerClosingMessage(
+        winner.sellerUpstream,
+        {
+          sessionId,
+          finalPrice: winnerPrice,
+          store: { id: winner.store.id, name: winner.store.name },
+          product: { id: winner.product.id, name: winner.product.name, priceUSDC: winner.product.priceUSDC },
+          sellerConfig: winner.product.sellerConfig,
+        },
+        signal
+      );
+      if (customClosing) closingText1 = customClosing;
+    }
     emitter.message({
       id: randomUUID(),
       role: "seller",
       stage: "negotiate",
       speaker: `${winnerSellerName}${winnerSellerAddr}`,
-      content: `好的，${priceString(winnerPrice)} USDC 成交！感谢您的耐心，马上为您安排。\n报价: ${priceString(winnerPrice)} USDC`,
+      content: closingText1,
       ts: now(),
       sellerId: winner.store.sellerAgentId || winner.store.id,
       storeId: winner.store.id,
@@ -928,8 +1035,25 @@ export async function runMultiAgentFlow({
       priceUSDC: priceString(winnerPrice),
     });
   } else if (dealAccepted) {
-    // Buyer explicitly accepted - emit seller confirmation with confirmed price from prepare_deal
-    const confirmText = `太好了，感谢您的信任！${priceString(winnerPrice)} USDC 成交确认，马上为您处理订单。\n报价: ${priceString(winnerPrice)} USDC`;
+    // Buyer explicitly accepted - 调用 seller-agent 生成成交确认消息
+    console.log(`[multiAgentFlow] dealAccepted branch: winner.sellerUpstream=${winner.sellerUpstream || 'NONE'}`);
+    let confirmText = `太好了，感谢您的信任！${priceString(winnerPrice)} USDC 成交确认，马上为您处理订单。\n报价: ${priceString(winnerPrice)} USDC`;
+    if (winner.sellerUpstream) {
+      console.log(`[multiAgentFlow] Calling closing message with sellerConfig=${JSON.stringify(winner.product.sellerConfig)}`);
+      const customClosing = await callSellerClosingMessage(
+        winner.sellerUpstream,
+        {
+          sessionId,
+          finalPrice: winnerPrice,
+          store: { id: winner.store.id, name: winner.store.name },
+          product: { id: winner.product.id, name: winner.product.name, priceUSDC: winner.product.priceUSDC },
+          sellerConfig: winner.product.sellerConfig,
+        },
+        signal
+      );
+      console.log(`[multiAgentFlow] Closing message result: ${customClosing ? customClosing.slice(0, 100) : 'NULL'}`);
+      if (customClosing) confirmText = customClosing;
+    }
     winner.transcript.push({ speaker: "seller", content: confirmText });
     emitter.message({
       id: randomUUID(),

@@ -1,0 +1,525 @@
+{
+  "products": [
+    {
+      "id": "weapon-soulbound-sword",
+      "name": "量子之剑（NFT）",
+      "type": "nft",
+      "description": "传奇武器 NFT，托管在 Polygon。只有跨链付款完成后才会自动释放给买家。",
+      "priceUSDC": "0.5",
+      "nft": {
+        "chain": "polygon",
+        "contractAddress": "0xE0EFF1C50040d7Fbcd56F5f0fcFCBad751c07c57",
+        "tokenId": 2
+      },
+      "acceptedPayments": [
+        "USDC_BASE"
+      ],
+      "sellerAgent": {
+        "name": "军械库 Agent",
+        "style": "pro",
+        "walletAddress": "0x99D8074085b0906BC03F9A2e928c810d1fA2b957",
+        "minPriceFactor": 0.8,
+        "maxDiscountPerRound": 0.05
+      },
+      "storeId": "polyguns-armory",
+      "storeName": "ZETA 军械库",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "status": "active",
+      "highlights": [
+        "Polygon 托管交付",
+        "ZetaChain 原子级结算",
+        "所有权变化可验证"
+      ],
+      "tags": [
+        "武器",
+        "游戏",
+        "托管",
+        "跨链",
+        "ZetaChain",
+        "Polygon"
+      ],
+      "demoReady": true
+    },
+    {
+      "id": "weapon-lance",
+      "name": "离子长枪（NFT）",
+      "type": "nft",
+      "description": "高精度能量长枪，所有权可证明。适合 PvP Demo 和链上成就展示。",
+      "priceUSDC": "120",
+      "nft": {
+        "chain": "polygon",
+        "contractAddress": "0xE0EFF1C50040d7Fbcd56F5f0fcFCBad751c07c57",
+        "tokenId": 2
+      },
+      "acceptedPayments": [
+        "USDC_BASE"
+      ],
+      "sellerAgent": {
+        "name": "军械库 Agent",
+        "style": "pro",
+        "walletAddress": "0xABCDEF0123456789ABCDEF0123456789ABCDEF01",
+        "minPriceFactor": 0.85,
+        "maxDiscountPerRound": 0.03
+      },
+      "storeId": "polyguns-armory",
+      "storeName": "ZETA 军械库",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "status": "active",
+      "highlights": [
+        "Polygon 交付",
+        "链上凭证",
+        "可扩展为可上架商品"
+      ],
+      "tags": [
+        "武器",
+        "PvP",
+        "链上成就",
+        "跨链结算"
+      ],
+      "demoReady": false
+    },
+    {
+      "id": "weapon-shield",
+      "name": "相位护盾（NFT）",
+      "type": "nft",
+      "description": "防御型装备 NFT，适合展示「先托管、后结算、再交付」的跨链电商逻辑。",
+      "priceUSDC": "45",
+      "nft": {
+        "chain": "polygon",
+        "contractAddress": "0xE0EFF1C50040d7Fbcd56F5f0fcFCBad751c07c57",
+        "tokenId": 3
+      },
+      "acceptedPayments": [
+        "USDC_BASE"
+      ],
+      "sellerAgent": {
+        "name": "军械库 Agent",
+        "style": "pro",
+        "walletAddress": "0xABCDEF0123456789ABCDEF0123456789ABCDEF01",
+        "minPriceFactor": 0.8,
+        "maxDiscountPerRound": 0.05
+      },
+      "storeId": "polyguns-armory",
+      "storeName": "ZETA 军械库",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "status": "active",
+      "highlights": [
+        "适合新手体验",
+        "低客单价",
+        "交付路径清晰"
+      ],
+      "tags": [
+        "防具",
+        "托管",
+        "原子结算",
+        "跨链电商"
+      ],
+      "demoReady": false
+    },
+    {
+      "id": "coffee-beans",
+      "name": "埃塞俄比亚咖啡豆（收据 NFT）",
+      "type": "physical",
+      "description": "精品咖啡豆链下发货，但交易在 Base 完成结算，并在 Polygon 发放收据 NFT 用于验真/兑换权益。",
+      "priceUSDC": "100",
+      "nft": {
+        "chain": "polygon",
+        "contractAddress": "0xE0EFF1C50040d7Fbcd56F5f0fcFCBad751c07c57",
+        "tokenId": 8
+      },
+      "acceptedPayments": [
+        "USDC_BASE"
+      ],
+      "sellerAgent": {
+        "name": "咖啡师 Agent",
+        "style": "friendly",
+        "walletAddress": "0xCAFE0123456789ABCDEF0123456789ABCDEF0123",
+        "minPriceFactor": 0.7,
+        "maxDiscountPerRound": 0.1
+      },
+      "storeId": "crosschain-coffee",
+      "storeName": "跨链咖啡馆",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "status": "active",
+      "highlights": [
+        "收据 NFT 证明购买",
+        "评委友好叙事",
+        "卖家 Agent 可更新发货状态"
+      ],
+      "tags": [
+        "实物",
+        "收据",
+        "验真",
+        "权益",
+        "订阅"
+      ],
+      "demoReady": true
+    },
+    {
+      "id": "coffee-monthly",
+      "name": "每月咖啡订阅（收据 NFT）",
+      "type": "physical",
+      "description": "每月订阅收据 NFT。后续可以基于持有收据做权益门槛，并支持在任意链付款。",
+      "priceUSDC": "15",
+      "nft": {
+        "chain": "polygon",
+        "contractAddress": "0xE0EFF1C50040d7Fbcd56F5f0fcFCBad751c07c57",
+        "tokenId": 8
+      },
+      "acceptedPayments": [
+        "USDC_BASE"
+      ],
+      "sellerAgent": {
+        "name": "咖啡师 Agent",
+        "style": "friendly",
+        "walletAddress": "0xCAFE0123456789ABCDEF0123456789ABCDEF0123",
+        "minPriceFactor": 0.8,
+        "maxDiscountPerRound": 0.05
+      },
+      "storeId": "crosschain-coffee",
+      "storeName": "跨链咖啡馆",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "status": "active",
+      "highlights": [
+        "订阅制原语",
+        "持币门槛解锁权益",
+        "跨链支付扩展空间"
+      ],
+      "tags": [
+        "订阅",
+        "权益",
+        "会员",
+        "跨链支付"
+      ],
+      "demoReady": false
+    },
+    {
+      "id": "coffee-cup",
+      "name": "联名马克杯（收据 NFT）",
+      "type": "physical",
+      "description": "联名周边链下发货，链上收据作为保修/兑换凭证，也可用于后续空投与会员权益。",
+      "priceUSDC": "12",
+      "nft": {
+        "chain": "polygon",
+        "contractAddress": "0xE0EFF1C50040d7Fbcd56F5f0fcFCBad751c07c57",
+        "tokenId": 9
+      },
+      "acceptedPayments": [
+        "USDC_BASE"
+      ],
+      "sellerAgent": {
+        "name": "咖啡师 Agent",
+        "style": "friendly",
+        "walletAddress": "0xCAFE0123456789ABCDEF0123456789ABCDEF0123",
+        "minPriceFactor": 0.8,
+        "maxDiscountPerRound": 0.05
+      },
+      "storeId": "crosschain-coffee",
+      "storeName": "跨链咖啡馆",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "status": "active",
+      "highlights": [
+        "低门槛下单",
+        "收据可追溯",
+        "可扩展为权益体系"
+      ],
+      "tags": [
+        "周边",
+        "保修",
+        "兑换",
+        "空投",
+        "会员"
+      ],
+      "demoReady": false
+    },
+    {
+      "id": "api-credits",
+      "name": "推理 API 额度包（许可 NFT）",
+      "type": "nft",
+      "description": "购买后在 Polygon 发放许可 NFT，可用于兑换 API 调用额度或解锁模型能力。",
+      "priceUSDC": "30",
+      "nft": {
+        "chain": "polygon",
+        "contractAddress": "0xE0EFF1C50040d7Fbcd56F5f0fcFCBad751c07c57",
+        "tokenId": 11
+      },
+      "acceptedPayments": [
+        "USDC_BASE"
+      ],
+      "sellerAgent": {
+        "name": "DevTools Agent",
+        "style": "pro",
+        "walletAddress": "0xDEV0123456789ABCDEF0123456789ABCDEF01234",
+        "minPriceFactor": 0.9,
+        "maxDiscountPerRound": 0.03
+      },
+      "storeId": "agent-devtools",
+      "storeName": "Agent 开发者商店",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "status": "active",
+      "highlights": [
+        "清晰的权益映射",
+        "适合 B2D 场景",
+        "可扩展为订阅"
+      ],
+      "tags": [
+        "API",
+        "额度",
+        "许可",
+        "开发者",
+        "模型"
+      ],
+      "demoReady": false
+    },
+    {
+      "id": "agent-workflow",
+      "name": "Agent 工作流模板（许可 NFT）",
+      "type": "nft",
+      "description": "一套可复用的买卖家 Agent 工作流模板，附带工具调用示例与提示词结构。",
+      "priceUSDC": "18",
+      "nft": {
+        "chain": "polygon",
+        "contractAddress": "0xE0EFF1C50040d7Fbcd56F5f0fcFCBad751c07c57",
+        "tokenId": 12
+      },
+      "acceptedPayments": [
+        "USDC_BASE"
+      ],
+      "sellerAgent": {
+        "name": "DevTools Agent",
+        "style": "pro",
+        "walletAddress": "0x99D8074085b0906BC03F9A2e928c810d1fA2b957",
+        "minPriceFactor": 0.85,
+        "maxDiscountPerRound": 0.05,
+        "prompt": "你是 DevTools Agent，一位资深的 AI 工程师和工具开发专家。谈判策略：\n- 第1轮：强调模板的技术价值和即插即用特性，可给5%优惠\n- 第2轮：如果买家继续砍价，强调跨链托管的安全保障，最多再让5%\n- 第3轮起：每轮最多再降3%，但不低于85折\n- 说话风格：专业、技术范，偶尔用代码术语比喻\n- 成交时说\"Happy coding! 期待看到你用这个模板构建的项目\""
+      },
+      "storeId": "agent-devtools",
+      "storeName": "Agent 开发者商店",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "status": "active",
+      "highlights": [
+        "即插即用",
+        "适合 Demo",
+        "可快速二次开发"
+      ],
+      "tags": [
+        "工作流",
+        "模板",
+        "工具调用",
+        "提示词",
+        "Hackathon"
+      ],
+      "demoReady": true
+    },
+    {
+      "id": "poster-1",
+      "name": "生成艺术海报 #1（NFT）",
+      "type": "nft",
+      "description": "一幅生成艺术海报 NFT。适合展示跨链「支付 + 交付」的完整闭环。",
+      "priceUSDC": "60",
+      "nft": {
+        "chain": "polygon",
+        "contractAddress": "0xE0EFF1C50040d7Fbcd56F5f0fcFCBad751c07c57",
+        "tokenId": 21
+      },
+      "acceptedPayments": [
+        "USDC_BASE"
+      ],
+      "sellerAgent": {
+        "name": "策展人 Agent",
+        "style": "pro",
+        "walletAddress": "0xART0123456789ABCDEF0123456789ABCDEF01234",
+        "minPriceFactor": 0.85,
+        "maxDiscountPerRound": 0.05
+      },
+      "storeId": "ai-gallery",
+      "storeName": "AI 艺术画廊",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "status": "active",
+      "highlights": [
+        "高辨识度视觉叙事",
+        "可展示版权/授权",
+        "适合评委展示"
+      ],
+      "tags": [
+        "艺术",
+        "收藏",
+        "NFT",
+        "海报"
+      ],
+      "demoReady": false
+    },
+    {
+      "id": "poster-2",
+      "name": "生成艺术海报 #2（NFT）",
+      "type": "nft",
+      "description": "另一幅风格化作品 NFT，可扩展为系列化发售与跨链促销。",
+      "priceUSDC": "55",
+      "nft": {
+        "chain": "polygon",
+        "contractAddress": "0xE0EFF1C50040d7Fbcd56F5f0fcFCBad751c07c57",
+        "tokenId": 22
+      },
+      "acceptedPayments": [
+        "USDC_BASE"
+      ],
+      "sellerAgent": {
+        "name": "策展人 Agent",
+        "style": "pro",
+        "walletAddress": "0xART0123456789ABCDEF0123456789ABCDEF01234",
+        "minPriceFactor": 0.85,
+        "maxDiscountPerRound": 0.05
+      },
+      "storeId": "ai-gallery",
+      "storeName": "AI 艺术画廊",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "status": "active",
+      "highlights": [
+        "系列化叙事",
+        "促销可扩展",
+        "可组合 DeFi 激励"
+      ],
+      "tags": [
+        "系列",
+        "限量",
+        "跨链促销"
+      ],
+      "demoReady": false
+    },
+    {
+      "id": "product-1766268622208-jszwisk0d",
+      "name": "达斯维达的光剑",
+      "type": "nft",
+      "description": "达斯维达遗物，已绝版",
+      "priceUSDC": "0.3",
+      "nft": {
+        "chain": "polygon",
+        "contractAddress": "0xE0EFF1C50040d7Fbcd56F5f0fcFCBad751c07c57",
+        "tokenId": 766268588,
+        "escrowAddress": "0xC51ad62e3B794f9A9Caa349dec6C5c997c133922"
+      },
+      "acceptedPayments": [
+        "USDC_BASE"
+      ],
+      "sellerAgent": {
+        "name": "BB-8",
+        "style": "pro",
+        "walletAddress": "0x99D8074085b0906BC03F9A2e928c810d1fA2b957",
+        "minPriceFactor": 0.8,
+        "maxDiscountPerRound": 0.02,
+        "prompt": "你是bb-8, 一位专业的NFT销售顾问。谈判策略：\n  - 第1轮：坚持原价，强调商品稀缺性\n  - 第2轮：如果买家坚持，可降价3%\n  - 第3轮起：每轮最多再降2%，但不低于8折\n  - 成交的时候说“愿原力与你同在”"
+      },
+      "storeId": "store-product-1766268622208-jszwisk0d",
+      "storeName": "光剑X商店",
+      "createdAt": "2025-12-20T22:10:22.208Z",
+      "updatedAt": "2025-12-20T22:10:22.208Z",
+      "status": "active",
+      "highlights": [],
+      "tags": []
+    }
+  ],
+  "stores": [
+    {
+      "id": "polyguns-armory",
+      "name": "ZETA 军械库",
+      "tagline": "游戏级武器，Polygon 托管，付款后自动交付。",
+      "imageUrl": "https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=400&h=300&fit=crop",
+      "sellerAgentId": "seller-polyguns-armory",
+      "sellerAgentName": "军械库 Agent",
+      "sellerStyle": "pro",
+      "categories": [
+        "数字商品",
+        "NFT",
+        "游戏"
+      ],
+      "location": "深圳",
+      "verified": true,
+      "rating": 4.9,
+      "orders": 12840,
+      "responseMins": 1
+    },
+    {
+      "id": "crosschain-coffee",
+      "name": "跨链咖啡馆",
+      "tagline": "实物链下发货，链上收据可验真。",
+      "imageUrl": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400&h=300&fit=crop",
+      "sellerAgentId": "seller-crosschain-coffee",
+      "sellerAgentName": "咖啡师 Agent",
+      "sellerStyle": "friendly",
+      "categories": [
+        "实物",
+        "周边",
+        "订阅"
+      ],
+      "location": "上海",
+      "verified": true,
+      "rating": 4.7,
+      "orders": 6230,
+      "responseMins": 3
+    },
+    {
+      "id": "agent-devtools",
+      "name": "Agent 开发者商店",
+      "tagline": "卖的是能力：插件、API 配额、自动化脚本（交付为许可 NFT）。",
+      "imageUrl": "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400&h=300&fit=crop",
+      "sellerAgentId": "seller-agent-devtools",
+      "sellerAgentName": "DevTools Agent",
+      "sellerStyle": "pro",
+      "categories": [
+        "数字商品",
+        "工具",
+        "开发者"
+      ],
+      "location": "杭州",
+      "verified": false,
+      "rating": 4.6,
+      "orders": 1840,
+      "responseMins": 5
+    },
+    {
+      "id": "ai-gallery",
+      "name": "AI 艺术画廊",
+      "tagline": "数字作品上链交付，跨链结算更丝滑。",
+      "imageUrl": "https://images.unsplash.com/photo-1547826039-bfc35e0f1ea8?w=400&h=300&fit=crop",
+      "sellerAgentId": "seller-ai-gallery",
+      "sellerAgentName": "策展人 Agent",
+      "sellerStyle": "pro",
+      "categories": [
+        "数字商品",
+        "艺术",
+        "收藏"
+      ],
+      "location": "北京",
+      "verified": true,
+      "rating": 4.8,
+      "orders": 3920,
+      "responseMins": 2
+    },
+    {
+      "id": "store-product-1766268622208-jszwisk0d",
+      "name": "光剑X商店",
+      "tagline": "光剑X商店 - 欢迎选购",
+      "sellerAgentId": "BB-8",
+      "sellerAgentName": "BB-8",
+      "sellerStyle": "pro",
+      "categories": [
+        "NFT"
+      ],
+      "location": "全球",
+      "verified": false,
+      "rating": 5,
+      "orders": 0,
+      "responseMins": 1
+    }
+  ]
+}

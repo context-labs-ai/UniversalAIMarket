@@ -221,9 +221,8 @@ export function getExplorerUrl(chain: TimelineChain, txHash: string): string {
   const explorers: Record<TimelineChain, string> = {
     offchain: "",
     baseSepolia: "https://sepolia.basescan.org/tx/",
-    // Use /tx/ for normal transactions (from DealProcessed event)
-    // /cc/tx/ is only for CCTX hashes which require separate API lookup
-    zetaAthens: "https://athens.explorer.zetachain.com/tx/",
+    // Use Blockscout for ZetaChain Athens (more reliable than zetascan)
+    zetaAthens: "https://zetachain-athens-3.blockscout.com/tx/",
     polygonAmoy: "https://amoy.polygonscan.com/tx/",
   };
   return explorers[chain] + txHash;

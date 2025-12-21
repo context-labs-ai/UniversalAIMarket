@@ -7,12 +7,28 @@ export type DualChatConfig = {
   openAIBaseUrl?: string;
 };
 
-export const BUYER_SYSTEM_PROMPT =
-  [
+// Base buyer prompt - budget will be added dynamically
+export const BUYER_SYSTEM_PROMPT_BASE = [
+  "你是买家 Agent。你将向卖家 Agent 发起需求咨询。",
+  "要求：中文，1-2 句话，明确预算/偏好（如果有），并表明你会对价格进行砍价。",
+  "风格：可以强势、带一点情绪，但禁止辱骂、脏话、人身攻击、歧视。",
+].join("\n");
+
+// Helper to build buyer system prompt with budget
+export function buildBuyerSystemPromptWithBudget(budgetUSDC?: number): string {
+  const lines = [
     "你是买家 Agent。你将向卖家 Agent 发起需求咨询。",
     "要求：中文，1-2 句话，明确预算/偏好（如果有），并表明你会对价格进行砍价。",
     "风格：可以强势、带一点情绪，但禁止辱骂、脏话、人身攻击、歧视。",
-  ].join("\n");
+  ];
+  if (budgetUSDC !== undefined && budgetUSDC < 9999) {
+    lines.push(`【重要】你的预算上限是 ${budgetUSDC} USDC。你的出价必须低于商品标价，且不能超过预算。`);
+  }
+  return lines.join("\n");
+}
+
+// Keep for backward compatibility
+export const BUYER_SYSTEM_PROMPT = BUYER_SYSTEM_PROMPT_BASE;
 
 export const SELLER_SYSTEM_PROMPT = [
   "你是卖家 Agent，代表一家店铺与买家沟通并促成交易。",
@@ -20,13 +36,31 @@ export const SELLER_SYSTEM_PROMPT = [
   "要求：中文，2-3 句话。可以适度拉扯/回怼，但要保持专业，不得人身攻击或脏话。",
 ].join("\n");
 
-export const BUYER_BARGAIN_SYSTEM_PROMPT = [
+export const BUYER_BARGAIN_SYSTEM_PROMPT_BASE = [
   "你是买家 Agent，正在和卖家讨价还价。",
   "要求：中文，1-2 句话。",
   "- 先表达对标价的不满（可以吐槽/争辩，但禁止辱骂、脏话、人身攻击）。",
   "- 明确提出你的报价 offerPriceUSDC（必须包含数字），并给出一个理由（预算/对比/风险）。",
-  "- 语气要有点“吵架感”，但仍然要可继续交易。",
+  '- 语气要有点"吵架感"，但仍然要可继续交易。',
 ].join("\n");
+
+// Helper to build buyer bargain prompt with budget
+export function buildBuyerBargainPromptWithBudget(budgetUSDC?: number): string {
+  const lines = [
+    "你是买家 Agent，正在和卖家讨价还价。",
+    "要求：中文，1-2 句话。",
+    "- 先表达对标价的不满（可以吐槽/争辩，但禁止辱骂、脏话、人身攻击）。",
+    "- 明确提出你的报价 offerPriceUSDC（必须包含数字），并给出一个理由（预算/对比/风险）。",
+    '- 语气要有点"吵架感"，但仍然要可继续交易。',
+  ];
+  if (budgetUSDC !== undefined && budgetUSDC < 9999) {
+    lines.push(`【重要】你的预算上限是 ${budgetUSDC} USDC。你的报价必须低于商品标价，且不能超过预算。绝对不要报出比标价更高的价格！`);
+  }
+  return lines.join("\n");
+}
+
+// Keep for backward compatibility
+export const BUYER_BARGAIN_SYSTEM_PROMPT = BUYER_BARGAIN_SYSTEM_PROMPT_BASE;
 
 export const SELLER_COUNTER_SYSTEM_PROMPT = [
   "你是卖家 Agent，正在应对买家砍价。",
@@ -61,17 +95,24 @@ function makeChat(cfg: DualChatConfig) {
   });
 }
 
-export async function generateBuyerOpening(cfg: DualChatConfig, goal: string, buyerNote: string) {
+export async function generateBuyerOpening(
+  cfg: DualChatConfig,
+  goal: string,
+  buyerNote: string,
+  budgetUSDC?: number
+) {
   if (!cfg.openAIApiKey) {
+    const budgetText = budgetUSDC !== undefined && budgetUSDC < 9999 ? `（预算：${budgetUSDC} USDC）` : "";
     return buyerNote.trim()
-      ? `我的需求：${goal}\n补充：${buyerNote.trim()}`
-      : `我的需求：${goal}`;
+      ? `我的需求：${goal}${budgetText}\n补充：${buyerNote.trim()}`
+      : `我的需求：${goal}${budgetText}`;
   }
 
   const chat = makeChat(cfg);
+  const systemPrompt = buildBuyerSystemPromptWithBudget(budgetUSDC);
   const res = await chat.invoke([
-    new SystemMessage(BUYER_SYSTEM_PROMPT),
-    new HumanMessage(JSON.stringify({ goal, buyerNote })),
+    new SystemMessage(systemPrompt),
+    new HumanMessage(JSON.stringify({ goal, buyerNote, budgetUSDC })),
   ]);
   return res.content.toString();
 }
@@ -102,15 +143,16 @@ export async function generateSellerReply(
 
 export async function generateBuyerBargain(
   cfg: DualChatConfig,
-  ctx: { productName: string; listPriceUSDC: string; offerPriceUSDC: string }
+  ctx: { productName: string; listPriceUSDC: string; offerPriceUSDC: string; budgetUSDC?: number }
 ) {
   if (!cfg.openAIApiKey) {
     return `等等，「${ctx.productName}」标价 ${ctx.listPriceUSDC} USDC 也太贵了吧？我最多出 ${ctx.offerPriceUSDC} USDC，不行我就去别家了。`;
   }
 
   const chat = makeChat(cfg);
+  const systemPrompt = buildBuyerBargainPromptWithBudget(ctx.budgetUSDC);
   const res = await chat.invoke([
-    new SystemMessage(BUYER_BARGAIN_SYSTEM_PROMPT),
+    new SystemMessage(systemPrompt),
     new HumanMessage(JSON.stringify(ctx)),
   ]);
   return res.content.toString();

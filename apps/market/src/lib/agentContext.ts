@@ -127,6 +127,41 @@ export type AgentEngine = "builtin" | "proxy";
 // === Scenario ===
 export type AgentScenario = "single" | "multi";
 
+// === Buyer Config ===
+export type BuyerChain =
+  | "base_sepolia"
+  | "polygon_amoy"
+  | "ethereum_sepolia"
+  | "arbitrum_sepolia"
+  | "optimism_sepolia"
+  | "bsc_testnet";
+
+export interface BuyerConfig {
+  walletAddress: string;
+  privateKey: string; // Only stored in memory, never sent to server
+  budgetUSDC: string;
+  prompt: string; // Shopping goal
+  strategy: string; // Negotiation strategy
+  chain: BuyerChain; // Which chain to pay from
+  isConfigured: boolean;
+}
+
+// === LLM Config (Qwen) ===
+export type QwenModel =
+  | "qwen-turbo"
+  | "qwen-plus"
+  | "qwen-max"
+  | "qwen3-max"
+  | "qwen-vl-plus"
+  | "qwen-vl-max";
+
+export interface LLMConfig {
+  model: QwenModel;
+  apiKey: string;
+  baseUrl: string;
+  isConfigured: boolean;
+}
+
 // === Agent State ===
 export interface AgentState {
   // Connection
@@ -171,6 +206,12 @@ export interface AgentState {
   // Current deal (for settlement)
   deal: SerializedDeal | null;
 
+  // Buyer agent config (for browser-side signing)
+  buyerConfig: BuyerConfig | null;
+
+  // LLM config (Qwen)
+  llmConfig: LLMConfig | null;
+
   // Error
   errorMessage: string | null;
 }
@@ -189,6 +230,11 @@ export interface AgentActions {
   setAgentUpstream: (upstream: string) => void;
   setScenario: (scenario: AgentScenario) => void;
   confirmSettlement: () => Promise<void>;
+  // Buyer config actions
+  setBuyerConfig: (config: BuyerConfig | null) => void;
+  signDealWithBrowserWallet: (deal: SerializedDeal) => Promise<string>;
+  // LLM config actions
+  setLLMConfig: (config: LLMConfig | null) => void;
 }
 
 // === Combined Context Type ===

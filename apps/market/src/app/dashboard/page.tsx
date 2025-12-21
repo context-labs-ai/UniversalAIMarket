@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { STORES } from "@/lib/catalog";
+import { getAllStores } from "@/lib/catalogMerge";
 import { SearchBar } from "@/components/SearchBar";
 import { CategoryFilter } from "@/components/CategoryFilter";
 
@@ -8,27 +8,56 @@ type PageProps = {
   searchParams: Promise<{ category?: string }>;
 };
 
-export default async function HomePage({ searchParams }: PageProps) {
+function getCategoryList(stores: ReturnType<typeof getAllStores>) {
+  const categoryMap = new Map<string, number>();
+  for (const store of stores) {
+    for (const category of store.categories) {
+      categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
+    }
+  }
+  return Array.from(categoryMap.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export default async function DashboardPage({ searchParams }: PageProps) {
   const { category } = await searchParams;
 
+  const allStores = getAllStores();
   const filteredStores = category
-    ? STORES.filter((store) => store.categories.includes(category))
-    : STORES;
+    ? allStores.filter((store) => store.categories.includes(category))
+    : allStores;
+
+  // Prepare data for client components
+  const categories = getCategoryList(allStores);
+  const searchStores = allStores.map((store) => ({
+    id: store.id,
+    name: store.name,
+    tagline: store.tagline,
+    categories: store.categories,
+    verified: store.verified,
+    products: store.products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      priceUSDC: p.priceUSDC,
+      tags: p.tags,
+    })),
+  }));
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-6">
-      <header className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <SearchBar />
-          <div className="text-xs text-white/50 shrink-0">
-            <code className="font-mono text-white/70">/.well-known/universal-ai-market.json</code>
-          </div>
+      {/* 搜索栏 */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
+        <SearchBar stores={searchStores} />
+        <div className="text-xs text-white/50 shrink-0">
+          <code className="font-mono text-white/70">/.well-known/universal-ai-market.json</code>
         </div>
-      </header>
+      </div>
 
-      <section className="mt-6">
+      <section>
         <Suspense fallback={<div className="h-10" />}>
-          <CategoryFilter currentCategory={category} />
+          <CategoryFilter categories={categories} currentCategory={category} />
         </Suspense>
       </section>
 
@@ -48,10 +77,18 @@ export default async function HomePage({ searchParams }: PageProps) {
               className="glass-panel rounded-2xl p-4 transition-all hover:bg-white/[0.05] hover:border-[#d4a574]/20 flex gap-4"
             >
               {/* Avatar - 长方形 */}
-              <div className="shrink-0 w-24 self-stretch rounded-xl bg-gradient-to-br from-[#d4a574]/20 to-[#c8d86a]/10 border border-[#d4a574]/20 flex items-center justify-center min-h-[120px]">
-                <span className="text-4xl font-semibold text-[#d4a574]/80">
-                  {store.name.charAt(0)}
-                </span>
+              <div className="shrink-0 w-24 self-stretch rounded-xl bg-gradient-to-br from-[#d4a574]/20 to-[#c8d86a]/10 border border-[#d4a574]/20 flex items-center justify-center min-h-[120px] overflow-hidden">
+                {store.imageUrl ? (
+                  <img
+                    src={store.imageUrl}
+                    alt={store.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-4xl font-semibold text-[#d4a574]/80">
+                    {store.name.charAt(0)}
+                  </span>
+                )}
               </div>
 
               {/* 右侧内容 */}
@@ -61,6 +98,10 @@ export default async function HomePage({ searchParams }: PageProps) {
                   {store.verified ? (
                     <span className="shrink-0 rounded-full border border-[#c8d86a]/30 bg-[#c8d86a]/10 px-2 py-0.5 text-[10px] text-[#c8d86a]">
                       Verified
+                    </span>
+                  ) : store.isDynamic ? (
+                    <span className="shrink-0 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] text-indigo-200">
+                      动态
                     </span>
                   ) : (
                     <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/50">
@@ -112,4 +153,3 @@ export default async function HomePage({ searchParams }: PageProps) {
     </main>
   );
 }
-

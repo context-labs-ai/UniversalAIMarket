@@ -44,6 +44,8 @@ export function ConnectButton() {
   const handleRoleChange = (newRole: UserRole) => {
     setCurrentRole(newRole);
     setRole(newRole);
+    // 触发自定义事件通知其他组件
+    window.dispatchEvent(new Event("role-changed"));
   };
 
   if (!hasDynamicEnvironmentId) {

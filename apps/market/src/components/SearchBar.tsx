@@ -2,8 +2,22 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
-import { STORES } from "@/lib/catalog";
 import { scoreText } from "@/lib/textScore";
+
+type StoreData = {
+  id: string;
+  name: string;
+  tagline: string;
+  categories: string[];
+  verified: boolean;
+  products: {
+    id: string;
+    name: string;
+    description: string;
+    priceUSDC: string;
+    tags?: string[];
+  }[];
+};
 
 type SearchResult = {
   type: "store" | "product";
@@ -14,7 +28,11 @@ type SearchResult = {
   extra?: string;
 };
 
-export function SearchBar() {
+type Props = {
+  stores: StoreData[];
+};
+
+export function SearchBar({ stores }: Props) {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -26,7 +44,7 @@ export function SearchBar() {
 
     const searchResults: SearchResult[] = [];
 
-    for (const store of STORES) {
+    for (const store of stores) {
       const storeContent = `${store.name} ${store.tagline} ${store.categories.join(" ")}`;
       const storeScore = scoreText(storeContent, query);
       if (storeScore > 0) {
@@ -41,7 +59,7 @@ export function SearchBar() {
       }
 
       for (const product of store.products) {
-        const productContent = `${product.name} ${product.description} ${product.tags.join(" ")}`;
+        const productContent = `${product.name} ${product.description} ${(product.tags || []).join(" ")}`;
         const productScore = scoreText(productContent, query);
         if (productScore > 0) {
           searchResults.push({
@@ -57,7 +75,7 @@ export function SearchBar() {
     }
 
     return searchResults.slice(0, 8);
-  }, [query]);
+  }, [query, stores]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

@@ -1,9 +1,9 @@
 import { ethers } from "ethers";
-import { STORES, type Store } from "@/lib/catalog";
 import { encodeBase64Url } from "@/lib/base64url";
 import { createDeal, type Deal } from "@/lib/deal";
 import { clearSession, waitForConfirm } from "@/lib/agentSessions";
 import { getSessionFromRequest, isAuthRequired } from "@/lib/agentAuth";
+import { getAllStores, type MergedStore, type MergedProduct } from "@/lib/catalogMerge";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -175,24 +175,25 @@ function scoreText(haystack: string, needle: string) {
   return terms.reduce((sum, t) => sum + (content.includes(t) ? 1 : 0), 0);
 }
 
-function pickStore(goal: string, opts?: { preferDemoReady?: boolean }) {
-  const candidateStores = opts?.preferDemoReady ? STORES.filter((store) => store.products.some((p) => p.demoReady)) : STORES;
+function pickStore(goal: string, opts?: { preferDemoReady?: boolean }): MergedStore {
+  const allStores = getAllStores();
+  const candidateStores = opts?.preferDemoReady ? allStores.filter((store) => store.products.some((p) => p.demoReady)) : allStores;
   const scored = candidateStores
     .map((store) => {
       const content = `${store.name} ${store.tagline} ${store.location} ${store.categories.join(" ")} ${store.products
-        .map((p) => `${p.name} ${p.description} ${p.tags.join(" ")} ${p.highlights.join(" ")}`)
+        .map((p) => `${p.name} ${p.description} ${(p.tags || []).join(" ")} ${(p.highlights || []).join(" ")}`)
         .join(" ")}`;
       return { store, score: scoreText(content, goal) };
     })
     .sort((a, b) => b.score - a.score);
-  return scored[0]?.store ?? STORES[0];
+  return scored[0]?.store ?? allStores[0];
 }
 
-function pickProduct(store: Store, goal: string, opts?: { preferDemoReady?: boolean }) {
+function pickProduct(store: MergedStore, goal: string, opts?: { preferDemoReady?: boolean }): MergedProduct {
   const products = opts?.preferDemoReady ? store.products.filter((p) => p.demoReady) : store.products;
   const scored = products
     .map((product) => {
-      const content = `${product.name} ${product.description} ${product.tags.join(" ")} ${product.highlights.join(" ")}`;
+      const content = `${product.name} ${product.description} ${(product.tags || []).join(" ")} ${(product.highlights || []).join(" ")}`;
       return { product, score: scoreText(content, goal) };
     })
     .sort((a, b) => b.score - a.score);
@@ -261,27 +262,49 @@ async function streamBuiltin(req: Request) {
 
   const sessionId = crypto.randomUUID();
 
+  const selectedStore = pickStore(goal, { preferDemoReady: mode === "testnet" });
+  const product = pickProduct(selectedStore, goal, { preferDemoReady: mode === "testnet" });
+
+  // 动态商品使用 nftConfig 和 sellerConfig，静态商品使用环境变量
+  const isDynamic = product.isDynamic && product.nftConfig && product.sellerConfig;
+
   const buyerPk = process.env.BUYER_PRIVATE_KEY;
   const sellerPk = process.env.SELLER_PRIVATE_KEY;
 
   const buyerAddress = normalizeAddress(safeAddressFromPrivateKey(buyerPk), "buyer");
-  const sellerBaseAddress = normalizeAddress(safeAddressFromPrivateKey(sellerPk), "seller");
 
-  const polygonEscrow = normalizeAddress(process.env.POLYGON_WEAPON_ESCROW, "polygonEscrow");
-  const polygonNft = normalizeAddress(process.env.POLYGON_MOCK_WEAPON_NFT, "polygonNFT");
+  // 卖家地址：动态商品使用 sellerConfig.walletAddress，静态商品使用环境变量
+  const sellerBaseAddress = isDynamic && product.sellerConfig?.walletAddress
+    ? normalizeAddress(product.sellerConfig.walletAddress, "seller")
+    : normalizeAddress(safeAddressFromPrivateKey(sellerPk), "seller");
 
-  const configReady = Boolean(
-    isPresent(process.env.BASE_GATEWAY_ADDRESS) &&
-      isPresent(process.env.BASE_USDC_ADDRESS) &&
-      isPresent(process.env.ZETA_UNIVERSAL_MARKET) &&
-      isPresent(process.env.POLYGON_WEAPON_ESCROW) &&
-      isPresent(process.env.POLYGON_MOCK_WEAPON_NFT) &&
-      isPresent(process.env.BUYER_PRIVATE_KEY) &&
-      isPresent(process.env.SELLER_PRIVATE_KEY)
-  );
+  // NFT 配置：动态商品使用 nftConfig，静态商品使用环境变量
+  const polygonEscrow = isDynamic && product.nftConfig?.escrowAddress
+    ? normalizeAddress(product.nftConfig.escrowAddress, "polygonEscrow")
+    : normalizeAddress(process.env.POLYGON_WEAPON_ESCROW, "polygonEscrow");
+  const polygonNft = isDynamic && product.nftConfig?.contractAddress
+    ? normalizeAddress(product.nftConfig.contractAddress, "polygonNFT")
+    : normalizeAddress(process.env.POLYGON_MOCK_WEAPON_NFT, "polygonNFT");
+  const productTokenId = isDynamic && product.nftConfig?.tokenId !== undefined
+    ? product.nftConfig.tokenId
+    : product.tokenId;
 
-  const selectedStore = pickStore(goal, { preferDemoReady: mode === "testnet" });
-  const product = pickProduct(selectedStore, goal, { preferDemoReady: mode === "testnet" });
+  const configReady = isDynamic
+    ? Boolean(
+        product.nftConfig?.contractAddress &&
+        product.nftConfig?.escrowAddress &&
+        product.sellerConfig?.walletAddress &&
+        isPresent(process.env.BUYER_PRIVATE_KEY)
+      )
+    : Boolean(
+        isPresent(process.env.BASE_GATEWAY_ADDRESS) &&
+          isPresent(process.env.BASE_USDC_ADDRESS) &&
+          isPresent(process.env.ZETA_UNIVERSAL_MARKET) &&
+          isPresent(process.env.POLYGON_WEAPON_ESCROW) &&
+          isPresent(process.env.POLYGON_MOCK_WEAPON_NFT) &&
+          isPresent(process.env.BUYER_PRIVATE_KEY) &&
+          isPresent(process.env.SELLER_PRIVATE_KEY)
+      );
 
   const encoder = new TextEncoder();
 
@@ -317,9 +340,9 @@ async function streamBuiltin(req: Request) {
             role: "seller",
             stage: "browse",
             speaker: selectedStore.sellerAgentName,
-            content: `欢迎光临「${selectedStore.name}」。我推荐：${product.name}（${kindLabel(product.kind)}），价格 ${product.priceUSDC} USDC。亮点：${product.highlights
+            content: `欢迎光临「${selectedStore.name}」。我推荐：${product.name}（${kindLabel(product.kind)}），价格 ${product.priceUSDC} USDC。亮点：${(product.highlights || [])
               .slice(0, 3)
-              .join(" / ")}。库存：${inventoryLabel(product.inventory)}。`,
+              .join(" / ") || "精品好物"}。库存：${inventoryLabel(product.inventory)}。`,
             ts: now(),
           });
 
@@ -358,7 +381,7 @@ async function streamBuiltin(req: Request) {
               sellerBase: sellerBaseAddress,
               polygonEscrow,
               nft: polygonNft,
-              tokenId: product.tokenId,
+              tokenId: productTokenId,
               priceUSDC: product.priceUSDC,
               deadlineSecondsFromNow: 3600,
             },
@@ -371,7 +394,7 @@ async function streamBuiltin(req: Request) {
             sellerBase: sellerBaseAddress,
             polygonEscrow,
             nft: polygonNft,
-            tokenId: BigInt(product.tokenId),
+            tokenId: BigInt(productTokenId),
             price: ethers.parseUnits(product.priceUSDC, 6),
             deadline,
           });

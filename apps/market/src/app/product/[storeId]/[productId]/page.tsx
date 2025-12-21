@@ -1,11 +1,8 @@
-"use client";
-
-import { useState, use } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { STORES } from "@/lib/catalog";
-import { useCart } from "@/lib/cartStore";
+import { findProductById } from "@/lib/catalogMerge";
 import { CartButton } from "@/components/CartButton";
+import { AddToCartButton } from "./AddToCartButton";
 
 function getInventoryStatus(status: string) {
   switch (status) {
@@ -35,32 +32,15 @@ type PageProps = {
   params: Promise<{ storeId: string; productId: string }>;
 };
 
-export default function ProductPage({ params }: PageProps) {
-  const { storeId, productId } = use(params);
-  const store = STORES.find((s) => s.id === storeId);
-  const product = store?.products.find((p) => p.id === productId);
-  const { addItem } = useCart();
-  const [added, setAdded] = useState(false);
+export default async function ProductPage({ params }: PageProps) {
+  const { storeId, productId } = await params;
+  const result = findProductById(storeId, productId);
 
-  if (!store || !product) return notFound();
+  if (!result) return notFound();
 
+  const { store, product } = result;
   const inventory = getInventoryStatus(product.inventory);
   const emoji = getProductEmoji(product.kind, product.name);
-
-  function handleAddToCart() {
-    if (!store || !product) return;
-    addItem({
-      storeId: store.id,
-      storeName: store.name,
-      productId: product.id,
-      productName: product.name,
-      priceUSDC: product.priceUSDC,
-      tokenId: product.tokenId,
-      kind: product.kind,
-    });
-    setAdded(true);
-    setTimeout(() => setAdded(false), 2000);
-  }
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-10">
@@ -103,13 +83,18 @@ export default function ProductPage({ params }: PageProps) {
                 <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/60">
                   {product.kind === "digital" ? "数字商品" : "实物商品"}
                 </span>
+                {product.isDynamic && (
+                  <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-300">
+                    动态商品
+                  </span>
+                )}
               </div>
             </div>
 
             <p className="mt-4 text-sm text-white/60 leading-relaxed">{product.description}</p>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              {product.highlights.map((h) => (
+              {(product.highlights || []).map((h) => (
                 <span
                   key={h}
                   className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/60"
@@ -120,17 +105,15 @@ export default function ProductPage({ params }: PageProps) {
             </div>
 
             <div className="mt-6 grid gap-3">
-              <button
-                onClick={handleAddToCart}
-                disabled={added}
-                className={`w-full rounded-xl px-4 py-3 text-sm font-medium transition-all ${
-                  added
-                    ? "bg-emerald-500/20 text-emerald-200"
-                    : "bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30"
-                }`}
-              >
-                {added ? "✓ 已添加到购物车" : "添加到购物车"}
-              </button>
+              <AddToCartButton
+                storeId={store.id}
+                storeName={store.name}
+                productId={product.id}
+                productName={product.name}
+                priceUSDC={product.priceUSDC}
+                tokenId={product.tokenId}
+                kind={product.kind}
+              />
               <Link
                 href="/cart"
                 className="flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70 transition-colors hover:bg-white/10"
@@ -163,13 +146,27 @@ export default function ProductPage({ params }: PageProps) {
                 <span className="text-white/50">卖家 Agent</span>
                 <span className="text-white/80">{store.sellerAgentName}</span>
               </div>
+              {product.nftConfig && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-white/50">链</span>
+                    <span className="text-white/80">{product.nftConfig.chain}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-white/50">合约地址</span>
+                    <span className="text-white/80 font-mono text-xs">
+                      {product.nftConfig.contractAddress.slice(0, 6)}...{product.nftConfig.contractAddress.slice(-4)}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
           <div className="glass-panel rounded-2xl p-5">
             <h3 className="text-sm font-medium text-white/80">标签</h3>
             <div className="mt-3 flex flex-wrap gap-2">
-              {product.tags.map((tag) => (
+              {(product.tags || []).map((tag) => (
                 <span
                   key={tag}
                   className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/50"
@@ -194,4 +191,3 @@ export default function ProductPage({ params }: PageProps) {
     </main>
   );
 }
-

@@ -10,8 +10,14 @@ Agent Hub 是整个 AI 代购系统的**协调中心**，负责编排多个 AI A
 ┌─────────────────────────────────────────────────────────────────┐
 │                         前端 (apps/market)                       │
 │                      http://localhost:3001                       │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  Buyer Agent Config (浏览器端)                               ││
+│  │  - 钱包私钥（仅存浏览器内存，不发送到服务器）                    ││
+│  │  - 预算、购物目标、砍价策略、支付链选择                         ││
+│  └─────────────────────────────────────────────────────────────┘│
 └───────────────────────────────┬─────────────────────────────────┘
-                                │ SSE 事件流
+                                │ SSE 事件流 + 配置参数
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Agent Hub (apps/agent)                        │
@@ -20,18 +26,24 @@ Agent Hub 是整个 AI 代购系统的**协调中心**，负责编排多个 AI A
 │  ┌─────────────────┐   ┌─────────────────┐   ┌────────────────┐ │
 │  │  Multi-Agent    │   │   工具调用       │   │   SSE 输出     │ │
 │  │    协调器       │   │   (Market API)   │   │   (前端订阅)   │ │
+│  │  + LLM (Qwen)   │   │                 │   │               │ │
 │  └────────┬────────┘   └────────┬────────┘   └────────────────┘ │
 └───────────┼─────────────────────┼───────────────────────────────┘
             │                     │
     ┌───────┴───────┐             │
     ▼               ▼             ▼
-┌─────────┐   ┌─────────┐   ┌──────────────┐
-│ Buyer   │   │ Seller  │   │   Market     │
-│ Agent   │   │ Agents  │   │   Backend    │
-│ :8083   │   │ :8081   │   │   :3001      │
-│         │   │ :8082   │   │              │
-└─────────┘   └─────────┘   └──────────────┘
+┌─────────┐   ┌─────────────────────────────┐   ┌──────────────┐
+│ Buyer   │   │   Seller Agent Service      │   │   Market     │
+│ Agent   │   │   (单服务，按请求传入配置)     │   │   Backend    │
+│         │   │   - sellerConfig per request│   │              │
+│         │   │   - 支持 N 个卖家身份         │   │              │
+└─────────┘   └─────────────────────────────┘   └──────────────┘
 ```
+
+**说明**：
+- **Seller Agent** 是一个服务，通过请求中的 `sellerConfig` 参数支持不同卖家身份和风格
+- 每个请求可以指定：卖家名称、砍价风格（aggressive/pro/friendly）、底价策略等
+- 也可以部署多个实例用于负载均衡或隔离
 
 ---
 
@@ -178,15 +190,38 @@ cd apps/seller-agent && pnpm dev:b
 # apps/agent/.env
 PORT=8080
 WEB_BASE_URL=http://localhost:3001
-BUYER_AGENT_URL=http://localhost:8083
-SELLER_AGENT_A_URL=http://localhost:8081
-SELLER_AGENT_B_URL=http://localhost:8082
 
-# LLM 配置
+# Seller Agent URL（单服务，支持多卖家配置）
+SELLER_AGENT_URL=http://localhost:8081/api/seller/chat
+
+# LLM 配置（用于生成砍价对话）
 MODEL=qwen3-max
 OPENAI_API_KEY=your-api-key
-OPENAI_BASE_URL=https://your-llm-endpoint
+OPENAI_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 ```
+
+### LLM 模式
+
+启动时会自动测试 LLM 连接：
+
+```
+[agent] 测试 LLM 连接... (model: qwen3-max)
+[agent] ✅ LLM 连接成功
+```
+
+如果 LLM 不可用，会自动降级到固定话术模式：
+
+```
+[agent] ❌ LLM 连接失败
+[agent] fallback 到固定话术模式
+```
+
+### 预算控制
+
+用户在前端配置的预算会传递给 Agent Hub：
+- 买家 Agent 的 prompt 会包含预算上限
+- 搜索商品时会过滤超出预算的商品
+- 砍价时 LLM 被明确告知不能出价超过预算或商品标价
 
 ---
 

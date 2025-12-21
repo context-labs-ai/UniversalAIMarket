@@ -2,22 +2,18 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { STORES } from "@/lib/catalog";
 
-export function getCategoryList() {
-  const categoryMap = new Map<string, number>();
-  for (const store of STORES) {
-    for (const category of store.categories) {
-      categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
-    }
-  }
-  return Array.from(categoryMap.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count);
-}
+type Category = {
+  name: string;
+  count: number;
+};
 
-export function CategoryFilter({ currentCategory }: { currentCategory?: string }) {
-  const categories = getCategoryList();
+type Props = {
+  categories: Category[];
+  currentCategory?: string;
+};
+
+export function CategoryFilter({ categories, currentCategory }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 

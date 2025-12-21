@@ -31,6 +31,16 @@ function normalizeStyle(raw: string | undefined): SellerStyle {
   return "pro";
 }
 
+// Seller 配置类型（可从请求中传入或使用默认值）
+interface SellerConfig {
+  sellerId: string;
+  sellerName: string;
+  style: SellerStyle;
+  minPriceFactor: number;
+  maxDiscountPerRound: number;
+  prompt?: string; // 自定义卖家话术/策略
+}
+
 function computeQuote(opts: {
   listPrice: number;
   round: number;
@@ -46,9 +56,19 @@ function computeQuote(opts: {
   return round2(Math.max(minPrice, raw));
 }
 
+// 动态 Seller 配置 Schema（可选，用于从请求中获取配置）
+const SellerConfigSchema = z.object({
+  name: z.string().optional(),
+  style: z.enum(["aggressive", "pro", "friendly"]).optional(),
+  walletAddress: z.string().optional(),
+  minPriceFactor: z.number().optional(),
+  maxDiscountPerRound: z.number().optional(),
+  prompt: z.string().optional(), // 自定义卖家话术/策略
+}).optional();
+
 const ChatRequestSchema = z.object({
   sessionId: z.string().min(1),
-  round: z.number().int().min(1).max(10),
+  round: z.number().int().min(1).max(100), // 允许 round 99 用于成交确认消息
   buyerMessage: z.string().min(1),
   store: z
     .object({
@@ -65,6 +85,8 @@ const ChatRequestSchema = z.object({
       inventory: z.string().optional(),
     })
     .optional(),
+  // 动态 Seller 配置（可选）
+  sellerConfig: SellerConfigSchema,
 });
 
 const PrepareDealRequestSchema = z.object({
@@ -82,19 +104,21 @@ const PrepareDealRequestSchema = z.object({
     id: z.string(),
     name: z.string(),
   }),
+  // 动态 Seller 配置（可选）
+  sellerConfig: SellerConfigSchema,
 });
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
+// 默认配置（从环境变量）
 const port = envNumber("PORT", 8081);
-const sellerId = isPresent(process.env.SELLER_ID) ? process.env.SELLER_ID : "seller-agent";
-const sellerName = isPresent(process.env.SELLER_NAME) ? process.env.SELLER_NAME : "卖家 Agent";
-const style = normalizeStyle(process.env.SELLER_STYLE);
-
-const minPriceFactor = envNumber("MIN_PRICE_FACTOR", style === "aggressive" ? 0.85 : style === "friendly" ? 0.8 : 0.9);
-const maxDiscountPerRound = envNumber("MAX_DISCOUNT_PER_ROUND", 0.06);
+const defaultSellerId = isPresent(process.env.SELLER_ID) ? process.env.SELLER_ID : "seller-agent";
+const defaultSellerName = isPresent(process.env.SELLER_NAME) ? process.env.SELLER_NAME : "卖家 Agent";
+const defaultStyle = normalizeStyle(process.env.SELLER_STYLE);
+const defaultMinPriceFactor = envNumber("MIN_PRICE_FACTOR", defaultStyle === "aggressive" ? 0.85 : defaultStyle === "friendly" ? 0.8 : 0.9);
+const defaultMaxDiscountPerRound = envNumber("MAX_DISCOUNT_PER_ROUND", 0.06);
 
 const model = isPresent(process.env.MODEL) ? process.env.MODEL : "qwen-turbo";
 const openAIApiKey = isPresent(process.env.OPENAI_API_KEY) ? process.env.OPENAI_API_KEY : undefined;
@@ -102,6 +126,18 @@ const openAIBaseUrl = isPresent(process.env.OPENAI_BASE_URL) ? process.env.OPENA
 
 // LLM 连接状态
 let llmAvailable = false;
+
+// 获取 Seller 配置（优先使用请求中的配置，否则使用默认值）
+function getSellerConfig(requestConfig?: z.infer<typeof SellerConfigSchema>): SellerConfig {
+  return {
+    sellerId: defaultSellerId,
+    sellerName: requestConfig?.name || defaultSellerName,
+    style: requestConfig?.style || defaultStyle,
+    minPriceFactor: requestConfig?.minPriceFactor ?? defaultMinPriceFactor,
+    maxDiscountPerRound: requestConfig?.maxDiscountPerRound ?? defaultMaxDiscountPerRound,
+    prompt: requestConfig?.prompt, // 自定义话术
+  };
+}
 
 function createLLM() {
   return new ChatOpenAI({
@@ -138,55 +174,73 @@ async function testLLMConnection(): Promise<boolean> {
   }
 }
 
-function buildSystemPrompt(input: z.infer<typeof ChatRequestSchema>, quote: number) {
+function buildSystemPrompt(
+  input: z.infer<typeof ChatRequestSchema>,
+  quote: number,
+  config: SellerConfig
+) {
   const storeName = input.store?.name || input.store?.id || "本店";
   const productName = input.product?.name || input.product?.id || "该商品";
   const highlights = input.product?.highlights?.slice(0, 3).join(" / ");
   const inventory = input.product?.inventory;
 
   const tone =
-    style === "aggressive"
+    config.style === "aggressive"
       ? "更强势、会反驳、会制造紧迫感，但禁止辱骂和人身攻击。"
-      : style === "friendly"
+      : config.style === "friendly"
         ? "更热情、愿意让利、会用夸赞和赠品来促成成交。"
         : "更专业、强调品质/保障/交付与跨链托管安全。";
 
-  return [
-    `你是${sellerName}（${sellerId}），代表店铺「${storeName}」与买家谈判并促成成交。`,
+  const lines = [
+    `你是${config.sellerName}（${config.sellerId}），代表店铺「${storeName}」与买家谈判并促成成交。`,
     `沟通风格：${tone}`,
     "要求：中文、1-3 句话，必须包含明确报价行，格式严格为：报价: <数字> USDC",
     `当前商品：${productName}`,
     highlights ? `亮点：${highlights}` : "",
     inventory ? `库存：${inventory}` : "",
-    `本轮给出的报价是：${toPriceString(quote)} USDC（必须写在“报价:”行里）`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+    `本轮给出的报价是：${toPriceString(quote)} USDC（必须写在"报价:"行里）`,
+  ];
+
+  // 如果有自定义话术/策略，添加到 prompt 中
+  if (config.prompt) {
+    lines.push("");
+    lines.push(`【卖家专属策略】${config.prompt}`);
+  }
+
+  return lines.filter(Boolean).join("\n");
 }
 
-function generateFallbackReply(input: z.infer<typeof ChatRequestSchema>, quote: number) {
+function generateFallbackReply(
+  input: z.infer<typeof ChatRequestSchema>,
+  quote: number,
+  config: SellerConfig
+) {
   const listPrice = Number(input.product?.priceUSDC ?? "0");
   const listPriceText = Number.isFinite(listPrice) && listPrice > 0 ? toPriceString(listPrice) : "未知";
 
   const opening =
-    style === "aggressive"
+    config.style === "aggressive"
       ? `别再压了，这个价已经很顶。标价 ${listPriceText} USDC，给你最后一次机会。`
-      : style === "friendly"
+      : config.style === "friendly"
         ? `我理解你想省预算～标价 ${listPriceText} USDC，我尽量帮你申请到优惠。`
         : `我们这款主打品质与跨链托管交付，价格有底线，但我可以给你最优方案。标价 ${listPriceText} USDC。`;
   return `${opening}\n报价: ${toPriceString(quote)} USDC`;
 }
 
-async function generateReply(input: z.infer<typeof ChatRequestSchema>, quote: number) {
+async function generateReply(
+  input: z.infer<typeof ChatRequestSchema>,
+  quote: number,
+  config: SellerConfig
+) {
   // 如果 LLM 不可用，直接使用固定话术
   if (!llmAvailable) {
-    return generateFallbackReply(input, quote);
+    return generateFallbackReply(input, quote, config);
   }
 
   // 尝试调用 LLM，失败时 fallback
   try {
     const llm = createLLM();
-    const system = new SystemMessage(buildSystemPrompt(input, quote));
+    const system = new SystemMessage(buildSystemPrompt(input, quote, config));
     const human = new HumanMessage(`买家消息：${input.buyerMessage}\n请回复并给出报价。`);
     const res = await llm.invoke([system, human]);
     const text = String(res.content ?? "").trim();
@@ -195,12 +249,89 @@ async function generateReply(input: z.infer<typeof ChatRequestSchema>, quote: nu
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.log(`[seller-agent] LLM 调用失败: ${msg}，使用 fallback`);
-    return generateFallbackReply(input, quote);
+    return generateFallbackReply(input, quote, config);
   }
 }
 
+/**
+ * 用 LLM 从消息中提取成交价格
+ */
+async function extractPriceFromMessage(message: string, fallbackPrice: number): Promise<number> {
+  if (!llmAvailable) {
+    // fallback: 简单正则提取数字
+    const match = message.match(/(\d+(?:\.\d+)?)/);
+    return match ? parseFloat(match[1]) : fallbackPrice;
+  }
+
+  try {
+    const llm = createLLM();
+    const system = new SystemMessage(
+      `你是一个价格提取助手。从用户消息中提取成交价格数字。
+只返回一个纯数字，不要任何货币符号或其他文字。
+如果无法确定价格，返回 "${fallbackPrice}"。`
+    );
+    const human = new HumanMessage(`消息: "${message}"\n提取价格数字:`);
+    const result = await llm.invoke([system, human]);
+    const text = String(result.content ?? "").trim();
+    const price = parseFloat(text.replace(/[^\d.]/g, ""));
+    return Number.isFinite(price) && price > 0 ? round2(price) : fallbackPrice;
+  } catch (err) {
+    console.log(`[seller-agent] 提取价格失败: ${err instanceof Error ? err.message : err}`);
+    return fallbackPrice;
+  }
+}
+
+/**
+ * 生成成交确认消息
+ */
+async function generateClosingMessage(
+  input: z.infer<typeof ChatRequestSchema>,
+  finalPrice: number,
+  config: SellerConfig
+): Promise<string> {
+  // 如果有自定义 prompt，优先使用其中的成交话术
+  if (config.prompt && llmAvailable) {
+    try {
+      const llm = createLLM();
+      const system = new SystemMessage(
+        `你是${config.sellerName}。买家已同意以 ${toPriceString(finalPrice)} 的价格成交。
+请生成一条简短的成交确认消息（1-2句话）。
+
+【卖家专属策略】${config.prompt}
+
+要求：
+- 确认成交价格
+- 使用策略中指定的成交话术（如果有）
+- 不要再报新价格，只确认已同意的价格`
+      );
+      const human = new HumanMessage(`生成成交确认消息:`);
+      const result = await llm.invoke([system, human]);
+      return String(result.content ?? "").trim();
+    } catch (err) {
+      console.log(`[seller-agent] 生成成交消息失败: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  // Fallback: 根据风格生成默认成交消息
+  const closings: Record<SellerStyle, string> = {
+    aggressive: `成交！${toPriceString(finalPrice)} 就这么定了。马上给你安排发货。`,
+    friendly: `太棒了！感谢您的信任～${toPriceString(finalPrice)} 成交，马上为您处理订单！`,
+    pro: `感谢您的选择！${toPriceString(finalPrice)} 成交确认，订单已生成，跨链托管保障交付安全。`,
+  };
+
+  return closings[config.style] || closings.pro;
+}
+
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, sellerId, sellerName, style, model, llmAvailable });
+  res.json({
+    ok: true,
+    sellerId: defaultSellerId,
+    sellerName: defaultSellerName,
+    style: defaultStyle,
+    model,
+    llmAvailable,
+    mode: "hub", // 表示这是 hub 模式，支持动态配置
+  });
 });
 
 app.post("/api/seller/chat", async (req, res) => {
@@ -210,24 +341,45 @@ app.post("/api/seller/chat", async (req, res) => {
   }
 
   const input = parsed.data;
+  const config = getSellerConfig(input.sellerConfig);
+
   const listPriceRaw = input.product?.priceUSDC;
   const listPriceNum = isPresent(listPriceRaw) ? Number(listPriceRaw) : NaN;
   const listPrice = Number.isFinite(listPriceNum) && listPriceNum > 0 ? listPriceNum : 80;
 
+  // round >= 99 是成交确认模式，不计算新价格
+  if (input.round >= 99) {
+    try {
+      // 用 LLM 从买家消息中提取成交价格
+      const finalPrice = await extractPriceFromMessage(input.buyerMessage, listPrice);
+      const closingReply = await generateClosingMessage(input, finalPrice, config);
+      return res.json({
+        ok: true,
+        sellerId: config.sellerId,
+        sellerName: config.sellerName,
+        reply: closingReply,
+        quotePriceUSDC: toPriceString(finalPrice),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Seller agent failed";
+      return res.status(500).json({ ok: false, error: message });
+    }
+  }
+
   const quote = computeQuote({
     listPrice,
     round: input.round,
-    style,
-    minPriceFactor,
-    maxDiscountPerRound,
+    style: config.style,
+    minPriceFactor: config.minPriceFactor,
+    maxDiscountPerRound: config.maxDiscountPerRound,
   });
 
   try {
-    const reply = await generateReply(input, quote);
+    const reply = await generateReply(input, quote, config);
     return res.json({
       ok: true,
-      sellerId,
-      sellerName,
+      sellerId: config.sellerId,
+      sellerName: config.sellerName,
       reply,
       quotePriceUSDC: toPriceString(quote),
     });
@@ -250,6 +402,7 @@ app.post("/api/seller/prepare_deal", async (req, res) => {
   }
 
   const input = parsed.data;
+  const config = getSellerConfig(input.sellerConfig);
   const listPrice = Number(input.product.listPriceUSDC);
 
   // 从聊天记录中提取最终价格
@@ -266,8 +419,8 @@ app.post("/api/seller/prepare_deal", async (req, res) => {
   return res.json({
     ok: true,
     dealReady: true,
-    sellerId,
-    sellerName,
+    sellerId: config.sellerId,
+    sellerName: config.sellerName,
     deal: {
       productId: input.product.id,
       productName: input.product.name,
@@ -362,13 +515,14 @@ async function main() {
   llmAvailable = await testLLMConnection();
 
   app.listen(port, () => {
-    console.log(`[seller-agent] listening on http://localhost:${port} (${sellerId}, ${style})`);
-    console.log(`[seller-agent] LLM 模式: ${llmAvailable ? "启用" : "固定话术"}`);
+    console.log(`[seller-agent-hub] listening on http://localhost:${port}`);
+    console.log(`[seller-agent-hub] 默认配置: ${defaultSellerId} (${defaultStyle})`);
+    console.log(`[seller-agent-hub] 支持动态配置: 请求中传入 sellerConfig 即可覆盖默认值`);
+    console.log(`[seller-agent-hub] LLM 模式: ${llmAvailable ? "启用" : "固定话术"}`);
   });
 }
 
 main().catch((err) => {
-  console.error("[seller-agent] 启动失败:", err);
+  console.error("[seller-agent-hub] 启动失败:", err);
   process.exit(1);
 });
-

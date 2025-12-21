@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { STORES } from "@/lib/catalog";
+import { findStoreById } from "@/lib/catalogMerge";
 
 type PageProps = {
   params: Promise<{ storeId: string }>;
@@ -8,7 +8,7 @@ type PageProps = {
 
 export default async function StorePage({ params }: PageProps) {
   const { storeId } = await params;
-  const store = STORES.find((s) => s.id === storeId);
+  const store = findStoreById(storeId);
   if (!store) return notFound();
 
   return (
@@ -53,7 +53,7 @@ export default async function StorePage({ params }: PageProps) {
                 <span className="text-white/45">{p.demoReady ? "DemoReady" : "SimOnly"}</span>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                {p.highlights.slice(0, 3).map((h) => (
+                {(p.highlights || []).slice(0, 3).map((h) => (
                   <span
                     key={h}
                     className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/60"

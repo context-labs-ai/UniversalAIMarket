@@ -1,12 +1,13 @@
 # Seller Agent Service
 
-独立的 Seller Agent 服务，代表卖家进行客服和砍价对话。
+Seller Agent 服务，代表卖家进行客服和砍价对话。**单服务支持多卖家身份**，通过请求参数动态配置。
 
 ## 功能
 
+- **多卖家支持**：单服务通过 `sellerConfig` 参数支持 N 个卖家身份
 - **多种风格**：支持 `aggressive`（强势）、`pro`（专业）、`friendly`（热情）三种销售风格
 - **智能报价**：根据砍价轮次动态调整报价，有底价保护
-- **LLM 增强**：使用 Qwen 大模型生成自然对话，失败时自动降级到模板
+- **LLM 增强**：使用 Qwen 等大模型生成自然对话，失败时自动降级到模板
 - **成交确认**：通过 `prepare_deal` 接口分析聊天记录确定最终成交价
 
 ## 接口
@@ -23,14 +24,14 @@
 
 ```bash
 # 1. 配置环境变量
-cp .env.seller-a.example .env.seller-a
-cp .env.seller-b.example .env.seller-b
-# 编辑 .env 文件，填入 API Key
+cp .env.example .env
+# 编辑 .env 文件，填入 LLM API Key
 
-# 2. 启动两个卖家 Agent（不同风格）
-pnpm dev:a  # Seller A (aggressive, 端口 8081)
-pnpm dev:b  # Seller B (pro, 端口 8082)
+# 2. 启动服务
+pnpm dev  # 默认端口 8081
 ```
+
+**注意**：单个服务实例即可支持多个卖家身份，通过请求中的 `sellerConfig` 参数区分不同卖家。
 
 ---
 
@@ -72,15 +73,21 @@ curl -X POST http://localhost:8081/api/seller/chat \
     "round": 1,
     "buyerMessage": "这个价格有点贵，能便宜点吗？",
     "store": { "id": "store-1", "name": "Polyguns 军械库" },
-    "product": { "id": "weapon-1", "name": "量子之剑", "priceUSDC": "0.50" }
+    "product": { "id": "weapon-1", "name": "量子之剑", "priceUSDC": "0.50" },
+    "sellerConfig": {
+      "name": "军械库客服小王",
+      "style": "aggressive",
+      "minPriceFactor": 0.85
+    }
   }'
 ```
 
 响应：
 ```json
 {
-  "sellerId": "seller-agent-a",
-  "sellerName": "卖家 Agent A",
+  "ok": true,
+  "sellerId": "seller-agent",
+  "sellerName": "军械库客服小王",
   "reply": "这把量子之剑品质上乘，0.48 USDC 已经是很优惠的价格了！\n报价: 0.48 USDC",
   "quotePriceUSDC": "0.48"
 }
@@ -125,47 +132,57 @@ curl -X POST http://localhost:8081/api/seller/prepare_deal \
 
 ## 与 Agent Hub 集成
 
-Seller Agent 作为独立服务运行，由 Agent Hub 协调：
+Seller Agent 作为单一服务运行，由 Agent Hub 协调，通过 `sellerConfig` 支持多个卖家身份：
 
 ```
 Agent Hub (8080)
      │
-     ├── /api/seller/chat ──────→  Seller Agent A (8081)
-     │                                    │
-     │                                    └── 返回报价
+     ├── /api/seller/chat ──────→  Seller Agent Service
+     │   + sellerConfig: 卖家 A         │
+     │                                  └── 返回卖家 A 的报价
      │
-     ├── /api/seller/chat ──────→  Seller Agent B (8082)
-     │                                    │
-     │                                    └── 返回报价
+     ├── /api/seller/chat ──────→  Seller Agent Service
+     │   + sellerConfig: 卖家 B         │
+     │                                  └── 返回卖家 B 的报价
      │
-     └── /api/seller/prepare_deal ──→  Winner Seller
-                                             │
-                                             └── 确认成交价
+     └── /api/seller/prepare_deal ──→  Seller Agent Service
+         + sellerConfig: 成交卖家        │
+                                        └── 确认成交价
 ```
 
 ---
 
 ## LLM 配置
 
-使用 Qwen 模型进行自然语言生成：
+使用 OpenAI 兼容的 LLM API（如 Qwen）进行自然语言生成：
 
 ```env
-MODEL=qwen-plus
-LLM_API_KEY=sk-your-dashscope-key
-LLM_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+MODEL=qwen3-max
+OPENAI_API_KEY=sk-your-api-key
+OPENAI_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 ```
 
 启动时会自动测试 LLM 连接：
 
 ```
-[seller-agent] 测试 LLM 连接... (model: qwen-plus)
+[seller-agent] 测试 LLM 连接... (model: qwen3-max)
 [seller-agent] ✅ LLM 连接成功，响应: "OK"
-[seller-agent] listening on http://localhost:8081 (seller-a, aggressive)
+[seller-agent] listening on http://localhost:8081
 ```
 
 如果 LLM 不可用，自动降级到模板模式：
 
 ```
-[seller-agent] ❌ LLM 连接失败
-[seller-agent] fallback 到固定话术模式
+[seller-agent] LLM 未配置，使用固定话术模式
 ```
+
+### sellerConfig 参数
+
+每个请求可以携带 `sellerConfig` 来指定卖家身份：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `name` | string | 卖家客服名称 |
+| `style` | string | 砍价风格：aggressive / pro / friendly |
+| `minPriceFactor` | number | 最低价格系数（0.7 = 最低 7 折） |
+| `maxDiscountPerRound` | number | 每轮最大降价幅度 |

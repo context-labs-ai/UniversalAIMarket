@@ -17,7 +17,10 @@ import {
   type SellerChat,
   type DealItem,
   type DealItemStatus,
+  type BuyerConfig,
+  type LLMConfig,
 } from "@/lib/agentContext";
+import { ethers } from "ethers";
 import { createInitialTimeline, updateTimelineStep } from "@/lib/agentTimeline";
 
 interface AgentProviderProps {
@@ -25,7 +28,7 @@ interface AgentProviderProps {
 }
 
 const DEFAULT_UPSTREAM = (process.env.NEXT_PUBLIC_AGENT_UPSTREAM || "http://localhost:8080/api/agent/stream").trim();
-const DEFAULT_ENGINE: AgentEngine = "proxy"; // Default to external agent for better demo experience
+const DEFAULT_ENGINE: AgentEngine = "builtin"; // Default to builtin Agent Hub (8080)
 const DEFAULT_SCENARIO: AgentScenario =
   (process.env.NEXT_PUBLIC_AGENT_SCENARIO || "").trim() === "multi" ? "multi" : "single";
 
@@ -50,6 +53,8 @@ const INITIAL_STATE: AgentState = {
   sellerChats: [],
   dealItems: [],
   deal: null,
+  buyerConfig: null,
+  llmConfig: null,
   errorMessage: null,
 };
 
@@ -366,7 +371,17 @@ export function AgentProvider({ children }: AgentProviderProps) {
         }
 
         case "done": {
-          setConnectionStatus("completed");
+          // Safety: mark all running steps as done when stream completes
+          // This handles cases where timeline_step events were lost due to network issues
+          setState((s) => ({
+            ...s,
+            connectionStatus: "completed",
+            timeline: s.timeline.map((step) =>
+              step.status === "running"
+                ? { ...step, status: "done" as const, detail: step.detail || "完成" }
+                : step
+            ),
+          }));
           break;
         }
 
@@ -717,8 +732,9 @@ export function AgentProvider({ children }: AgentProviderProps) {
     const currentEngine = state.agentEngine;
     const currentUpstream = state.agentUpstream.trim();
     const currentScenario = state.scenario;
+    const currentBuyerConfig = state.buyerConfig;
 
-    // Reset state but preserve user settings
+    // Reset state but preserve user settings AND buyer/llm config
     setState((prev) => ({
       ...INITIAL_STATE,
       demoMode: prev.demoMode,
@@ -726,6 +742,8 @@ export function AgentProvider({ children }: AgentProviderProps) {
       agentEngine: prev.agentEngine,
       agentUpstream: prev.agentUpstream,
       scenario: prev.scenario,
+      buyerConfig: prev.buyerConfig, // Preserve buyer config!
+      llmConfig: prev.llmConfig, // Preserve LLM config!
       isExpanded: true,
       isChatExpanded: true,
       connectionStatus: "discovering",
@@ -752,16 +770,39 @@ export function AgentProvider({ children }: AgentProviderProps) {
       const params = new URLSearchParams();
       params.set("mode", currentMode);
       params.set("checkoutMode", currentCheckoutMode);
-      if (goal) params.set("goal", goal);
+
+      // Use buyer config goal if available, otherwise use provided goal
+      const effectiveGoal = currentBuyerConfig?.prompt || goal;
+      if (effectiveGoal) params.set("goal", effectiveGoal);
+
+      // Pass buyer config budget if available
+      if (currentBuyerConfig?.budgetUSDC) {
+        params.set("budget", currentBuyerConfig.budgetUSDC);
+      }
+
+      // Pass buyer wallet address if available
+      if (currentBuyerConfig?.walletAddress) {
+        params.set("buyerAddress", currentBuyerConfig.walletAddress);
+      }
+
+      // Pass negotiation strategy if available
+      if (currentBuyerConfig?.strategy) {
+        params.set("strategy", currentBuyerConfig.strategy);
+      }
+
       if (currentScenario === "multi") params.set("scenario", "multi");
 
-      // If an external Agent SSE endpoint is provided, use market's proxy engine so UI can stay same-origin (no CORS).
-      if (currentEngine === "proxy") {
+      // 内置模式：使用默认的 Agent Hub (8080)
+      // 外置模式：使用用户自定义的 Agent URL
+      if (currentEngine === "builtin") {
+        // 内置模式自动使用我们配置好的 Agent Hub
+        params.set("engine", "proxy");
+        params.set("upstream", DEFAULT_UPSTREAM);
+      } else {
+        // 外置模式使用用户输入的 URL
         if (!currentUpstream) throw new Error("缺少 Agent Upstream，请在侧边栏填写 Agent API Endpoint");
         params.set("engine", "proxy");
         params.set("upstream", currentUpstream);
-      } else {
-        params.set("engine", "builtin");
       }
 
       const url = `/api/agent/stream?${params.toString()}`;
@@ -786,6 +827,7 @@ export function AgentProvider({ children }: AgentProviderProps) {
     state.checkoutMode,
     state.demoMode,
     state.scenario,
+    state.buyerConfig,
     runSseStream,
   ]);
 
@@ -907,12 +949,72 @@ export function AgentProvider({ children }: AgentProviderProps) {
     setState((s) => ({ ...s, scenario }));
   }, []);
 
+  const setBuyerConfig = useCallback((config: BuyerConfig | null) => {
+    setState((s) => ({ ...s, buyerConfig: config }));
+  }, []);
+
+  const setLLMConfig = useCallback((config: LLMConfig | null) => {
+    setState((s) => ({ ...s, llmConfig: config }));
+  }, []);
+
+  // Sign a deal using the browser-side wallet (private key never leaves browser)
+  const signDealWithBrowserWallet = useCallback(async (deal: SerializedDeal): Promise<string> => {
+    const buyerConfig = state.buyerConfig;
+    if (!buyerConfig || !buyerConfig.privateKey) {
+      throw new Error("Buyer wallet not configured");
+    }
+
+    try {
+      const wallet = new ethers.Wallet(buyerConfig.privateKey);
+
+      // EIP-712 domain and types for Deal
+      const domain = {
+        name: "UniversalMarket",
+        version: "1",
+        chainId: 80002, // Polygon Amoy
+        verifyingContract: deal.polygonEscrow as `0x${string}`,
+      };
+
+      const types = {
+        Deal: [
+          { name: "dealId", type: "bytes32" },
+          { name: "buyer", type: "address" },
+          { name: "sellerBase", type: "address" },
+          { name: "polygonEscrow", type: "address" },
+          { name: "nft", type: "address" },
+          { name: "tokenId", type: "uint256" },
+          { name: "price", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+        ],
+      };
+
+      const message = {
+        dealId: deal.dealId,
+        buyer: deal.buyer,
+        sellerBase: deal.sellerBase,
+        polygonEscrow: deal.polygonEscrow,
+        nft: deal.nft,
+        tokenId: BigInt(deal.tokenId),
+        price: BigInt(deal.price),
+        deadline: BigInt(deal.deadline),
+      };
+
+      const signature = await wallet.signTypedData(domain, types, message);
+      return signature;
+    } catch (err) {
+      throw new Error(`Failed to sign deal: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [state.buyerConfig]);
+
   const confirmSettlement = useCallback(async () => {
     const sessionId = state.sessionId;
     if (!sessionId || !state.awaitingConfirm) return;
 
     try {
-      const upstream = state.agentEngine === "proxy" ? state.agentUpstream.trim() : "";
+      // 内置模式用默认 Agent Hub，外置模式用用户配置的 upstream
+      const upstream = state.agentEngine === "builtin"
+        ? DEFAULT_UPSTREAM
+        : state.agentUpstream.trim();
       const res = await fetch("/api/agent/action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -946,6 +1048,9 @@ export function AgentProvider({ children }: AgentProviderProps) {
     setAgentUpstream,
     setScenario,
     confirmSettlement,
+    setBuyerConfig,
+    signDealWithBrowserWallet,
+    setLLMConfig,
   };
 
   return (

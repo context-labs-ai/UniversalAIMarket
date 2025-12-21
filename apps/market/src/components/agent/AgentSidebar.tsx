@@ -6,8 +6,12 @@ import { useAgent } from "@/lib/agentContext";
 import { AgentStatusBadge } from "./AgentStatusBadge";
 import { AgentTimeline } from "./AgentTimeline";
 import { AgentChatView } from "./AgentChatView";
+import { BuyerAgentConfig } from "./BuyerAgentConfig";
+import { SellerAgentConfig } from "./SellerAgentConfig";
+import { getCurrentRole, type UserRole } from "@/lib/auth/dynamic";
 
 type SidebarTab = "timeline" | "chat";
+type SettingsSection = "general" | "buyer" | "seller";
 
 const MIN_WIDTH = 320;
 const MAX_WIDTH = 600;
@@ -16,9 +20,28 @@ const DEFAULT_WIDTH = 400;
 export function AgentSidebar() {
   const [watchSessionId, setWatchSessionId] = useState("");
   const [activeTab, setActiveTab] = useState<SidebarTab>("timeline");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const isDraggingRef = useRef(false);
   const sidebarRef = useRef<HTMLElement>(null);
+  const [role, setRole] = useState<UserRole>("buyer");
+
+  // 监听角色变化
+  useEffect(() => {
+    setRole(getCurrentRole());
+    const handleRoleChange = () => {
+      const newRole = getCurrentRole();
+      setRole(newRole);
+      // 卖家模式下强制切回 general 设置
+      if (newRole === "seller") {
+        setSettingsSection("general");
+      }
+    };
+    window.addEventListener("role-changed", handleRoleChange);
+    return () => window.removeEventListener("role-changed", handleRoleChange);
+  }, []);
+
+  const isSeller = role === "seller";
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -118,8 +141,57 @@ export function AgentSidebar() {
           </button>
         </div>
 
-        {/* Settings */}
-        <div className="border-b border-white/10 bg-white/5 px-4 py-3 space-y-3">
+        {/* Settings Section Tabs */}
+        <div className="flex border-b border-white/10">
+          <button
+            onClick={() => setSettingsSection("general")}
+            className={clsx(
+              "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+              settingsSection === "general"
+                ? "text-white border-b-2 border-indigo-500 bg-white/5"
+                : "text-white/50 hover:text-white/70"
+            )}
+          >
+            通用
+          </button>
+          {/* 买家 Agent 选项卡 - 仅买家模式显示 */}
+          {!isSeller && (
+            <button
+              onClick={() => setSettingsSection("buyer")}
+              className={clsx(
+                "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+                settingsSection === "buyer"
+                  ? "text-white border-b-2 border-emerald-500 bg-white/5"
+                  : "text-white/50 hover:text-white/70"
+              )}
+            >
+              买家 Agent
+            </button>
+          )}
+          {/* 卖家 Agent 选项卡 - 仅卖家模式显示 */}
+          {isSeller && (
+            <button
+              onClick={() => setSettingsSection("seller")}
+              className={clsx(
+                "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+                settingsSection === "seller"
+                  ? "text-white border-b-2 border-amber-500 bg-white/5"
+                  : "text-white/50 hover:text-white/70"
+              )}
+            >
+              卖家 Agent
+            </button>
+          )}
+        </div>
+
+        {/* Settings Content */}
+        <div className="border-b border-white/10 bg-white/5 px-4 py-3 space-y-3 max-h-[40vh] overflow-y-auto">
+          {settingsSection === "buyer" && !isSeller ? (
+            <BuyerAgentConfig />
+          ) : settingsSection === "seller" && isSeller ? (
+            <SellerAgentConfig />
+          ) : (
+          <>
           <div className="flex items-center justify-between">
             <span className="text-xs text-white/50">运行模式</span>
             <div className="flex rounded-lg bg-black/30 p-0.5">
@@ -225,7 +297,7 @@ export function AgentSidebar() {
                 className={clsx(
                   "px-3 py-1 text-xs rounded-md transition-all",
                   agentEngine === "builtin"
-                    ? "bg-white/10 text-white/80"
+                    ? "bg-blue-500/20 text-blue-300"
                     : "text-white/40 hover:text-white/60",
                   !isDisconnected && "opacity-50 cursor-not-allowed"
                 )}
@@ -280,6 +352,8 @@ export function AgentSidebar() {
               </div>
               <div className="text-[11px] text-white/35">会订阅该 Session 的总聊天室 + 时间线</div>
             </div>
+          )}
+          </>
           )}
         </div>
 

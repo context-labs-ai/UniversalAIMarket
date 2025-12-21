@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { z } from "zod";
 import { encodeBase64Url } from "@/lib/base64url";
-import { STORES } from "@/lib/catalog";
+import { getAllStores, findStoreById, type MergedStore, type MergedProduct } from "@/lib/catalogMerge";
 import { createDeal, type Deal } from "@/lib/deal";
 import { scoreText } from "@/lib/textScore";
 import { getSessionFromRequest, isAuthRequired } from "@/lib/agentAuth";
@@ -40,7 +40,7 @@ function sellerAgentAddress(storeId: string) {
   return pseudoAddress(`seller-agent:${storeId}`);
 }
 
-function sellerAgentMeta(store: (typeof STORES)[number], origin?: string) {
+function sellerAgentMeta(store: MergedStore, origin?: string) {
   const chatEndpoint = origin ? new URL("/api/agent/tool", origin).toString() : "/api/agent/tool";
   return {
     id: store.sellerAgentId,
@@ -48,6 +48,8 @@ function sellerAgentMeta(store: (typeof STORES)[number], origin?: string) {
     address: sellerAgentAddress(store.id),
     chatEndpoint,
     chat: { tool: "seller_agent_chat" as const, args: { storeId: store.id } },
+    // 动态商品的 sellerConfig（用于 Seller Agent Hub）
+    ...(store.isDynamic && store.sellerConfig ? { sellerConfig: store.sellerConfig } : {}),
   };
 }
 
@@ -301,8 +303,8 @@ function buildSellerAgentReply({
   product,
   message,
 }: {
-  store: (typeof STORES)[number];
-  product?: (typeof STORES)[number]["products"][number];
+  store: MergedStore;
+  product?: MergedProduct;
   message: string;
 }) {
   const text = message.toLowerCase();
@@ -362,9 +364,10 @@ export async function POST(req: Request) {
       const limitRaw = typeof args.limit === "number" ? args.limit : 5;
       const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(20, limitRaw)) : 5;
 
-      const scored = STORES.map((store) => {
+      const allStores = getAllStores();
+      const scored = allStores.map((store) => {
         const content = `${store.name} ${store.tagline} ${store.location} ${store.categories.join(" ")} ${store.products
-          .map((p) => `${p.name} ${p.description} ${p.tags.join(" ")} ${p.highlights.join(" ")}`)
+          .map((p) => `${p.name} ${p.description} ${(p.tags || []).join(" ")} ${(p.highlights || []).join(" ")}`)
           .join(" ")}`;
         return { store, score: scoreText(content, query) };
       }).sort((a, b) => b.score - a.score);
@@ -386,6 +389,7 @@ export async function POST(req: Request) {
             sellerAgentId: store.sellerAgentId,
             sellerAgent: sellerAgentMeta(store, origin),
             hasDemoReady: store.products.some((p) => p.demoReady),
+            isDynamic: store.isDynamic,
           })),
         },
       });
@@ -397,12 +401,12 @@ export async function POST(req: Request) {
       const limitRaw = typeof args.limit === "number" ? args.limit : 5;
       const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(20, limitRaw)) : 5;
 
-      const store = STORES.find((s) => s.id === storeId);
+      const store = findStoreById(storeId);
       if (!store) throw new Error("Unknown storeId");
 
       const scored = store.products
         .map((product) => {
-          const content = `${product.name} ${product.description} ${product.tags.join(" ")} ${product.highlights.join(
+          const content = `${product.name} ${product.description} ${(product.tags || []).join(" ")} ${(product.highlights || []).join(
             " "
           )}`;
           return { product, score: scoreText(content, query) };
@@ -419,6 +423,7 @@ export async function POST(req: Request) {
             sellerAgentName: store.sellerAgentName,
             sellerAgentId: store.sellerAgentId,
             sellerAgent: sellerAgentMeta(store, origin),
+            isDynamic: store.isDynamic,
           },
           products: scored.slice(0, limit).map(({ product }) => ({
             id: product.id,
@@ -432,6 +437,9 @@ export async function POST(req: Request) {
             leadTime: product.leadTime,
             highlights: product.highlights,
             tags: product.tags,
+            isDynamic: product.isDynamic,
+            nftConfig: product.nftConfig,
+            sellerConfig: product.sellerConfig,
           })),
         },
       });
@@ -444,13 +452,14 @@ export async function POST(req: Request) {
       const filters = typeof args.filters === "object" && args.filters !== null ? args.filters : {};
 
       type ProductWithStore = {
-        product: (typeof STORES)[0]["products"][0];
-        store: (typeof STORES)[0];
+        product: MergedProduct;
+        store: MergedStore;
         score: number;
       };
 
+      const allStores = getAllStores();
       const allProducts: ProductWithStore[] = [];
-      for (const store of STORES) {
+      for (const store of allStores) {
         for (const product of store.products) {
           if (filters.kind && product.kind !== filters.kind) continue;
           if (filters.demoReady !== undefined && product.demoReady !== filters.demoReady) continue;
@@ -458,7 +467,7 @@ export async function POST(req: Request) {
           if (filters.minPrice && parseFloat(product.priceUSDC) < parseFloat(filters.minPrice)) continue;
           if (filters.maxPrice && parseFloat(product.priceUSDC) > parseFloat(filters.maxPrice)) continue;
 
-          const content = `${product.name} ${product.description} ${product.tags.join(" ")} ${product.highlights.join(" ")}`;
+          const content = `${product.name} ${product.description} ${(product.tags || []).join(" ")} ${(product.highlights || []).join(" ")}`;
           allProducts.push({ product, store, score: scoreText(content, query) });
         }
       }
@@ -481,6 +490,9 @@ export async function POST(req: Request) {
             leadTime: product.leadTime,
             highlights: product.highlights,
             tags: product.tags,
+            isDynamic: product.isDynamic,
+            nftConfig: product.nftConfig,
+            sellerConfig: product.sellerConfig,
             store: {
               id: store.id,
               name: store.name,
@@ -488,6 +500,7 @@ export async function POST(req: Request) {
               sellerAgentName: store.sellerAgentName,
               sellerAgentId: store.sellerAgentId,
               sellerAgent: sellerAgentMeta(store, origin),
+              isDynamic: store.isDynamic,
             },
           })),
         },
@@ -496,7 +509,7 @@ export async function POST(req: Request) {
 
     if (name === "get_store") {
       const storeId = typeof args.storeId === "string" ? args.storeId : "";
-      const store = STORES.find((s) => s.id === storeId);
+      const store = findStoreById(storeId);
       if (!store) throw new Error("Store not found");
 
       return Response.json({
@@ -516,6 +529,8 @@ export async function POST(req: Request) {
           sellerAgent: sellerAgentMeta(store, origin),
           sellerStyle: store.sellerStyle,
           productCount: store.products.length,
+          isDynamic: store.isDynamic,
+          sellerConfig: store.sellerConfig,
           products: store.products.map((p) => ({
             id: p.id,
             name: p.name,
@@ -523,6 +538,9 @@ export async function POST(req: Request) {
             priceUSDC: p.priceUSDC,
             demoReady: p.demoReady,
             inventory: p.inventory,
+            isDynamic: p.isDynamic,
+            nftConfig: p.nftConfig,
+            sellerConfig: p.sellerConfig,
           })),
         },
       });
@@ -532,7 +550,7 @@ export async function POST(req: Request) {
       const storeId = typeof args.storeId === "string" ? args.storeId : "";
       const productId = typeof args.productId === "string" ? args.productId : "";
 
-      const store = STORES.find((s) => s.id === storeId);
+      const store = findStoreById(storeId);
       if (!store) throw new Error("Store not found");
 
       const product = store.products.find((p) => p.id === productId);
@@ -552,6 +570,9 @@ export async function POST(req: Request) {
           leadTime: product.leadTime,
           highlights: product.highlights,
           tags: product.tags,
+          isDynamic: product.isDynamic,
+          nftConfig: product.nftConfig,
+          sellerConfig: product.sellerConfig,
           store: {
             id: store.id,
             name: store.name,
@@ -559,6 +580,8 @@ export async function POST(req: Request) {
             sellerAgentName: store.sellerAgentName,
             sellerAgentId: store.sellerAgentId,
             sellerAgent: sellerAgentMeta(store, origin),
+            isDynamic: store.isDynamic,
+            sellerConfig: store.sellerConfig,
           },
         },
       });
@@ -567,7 +590,8 @@ export async function POST(req: Request) {
     if (name === "list_categories") {
       const categoryMap = new Map<string, { count: number; stores: string[] }>();
 
-      for (const store of STORES) {
+      const allStores = getAllStores();
+      for (const store of allStores) {
         for (const category of store.categories) {
           const existing = categoryMap.get(category);
           if (existing) {
@@ -603,7 +627,7 @@ export async function POST(req: Request) {
       if (!storeId) throw new Error("Missing storeId");
       if (!message) throw new Error("Missing message");
 
-      const store = STORES.find((s) => s.id === storeId);
+      const store = findStoreById(storeId);
       if (!store) throw new Error("Store not found");
 
       const product = productId ? store.products.find((p) => p.id === productId) : undefined;
@@ -616,6 +640,12 @@ export async function POST(req: Request) {
           sellerAgent: sellerAgentMeta(store, origin),
           storeId: store.id,
           productId: product?.id ?? null,
+          isDynamic: store.isDynamic,
+          sellerConfig: store.sellerConfig,
+          productConfig: product ? {
+            nftConfig: product.nftConfig,
+            sellerConfig: product.sellerConfig,
+          } : null,
           ...built,
         },
       });

@@ -12,3 +12,5 @@ export { SellerChatCard } from "./SellerChatCard";
 export { ChatSidebar } from "./ChatSidebar";
 export { DealList } from "./DealList";
 export { DealSidebar } from "./DealSidebar";
+export { BuyerAgentConfig } from "./BuyerAgentConfig";
+export { SellerAgentConfig } from "./SellerAgentConfig";
