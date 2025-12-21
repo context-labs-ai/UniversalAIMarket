@@ -24,7 +24,9 @@
 
 <div align="center">
 
-[**观看演示视频**](./demo.mp4) | [YouTube](https://www.youtube.com/watch?v=nE3dKHVTGT8)
+[![Demo Video](./demo-preview.png)](https://www.youtube.com/watch?v=nE3dKHVTGT8)
+
+*点击观看演示视频 | 无法访问 YouTube？[下载视频](./demo.mp4)*
 
 </div>
 
